@@ -1,0 +1,11 @@
+class: LoginResponse
+fields:
+  success: bool
+  error: String?
+  role: String?
+  userId: String?
+  userName: String?
+  phone: String?
+  bloodGroup: String?
+  allergies: String?
+  profilePictureUrl: String?

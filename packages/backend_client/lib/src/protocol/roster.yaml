@@ -1,0 +1,10 @@
+class: Roster
+table: rosters
+fields:
+  rosterId: String
+  staffId: String
+  shiftType: String
+  shiftDate: String
+  timeRange: String
+  status: String
+  approvedBy: String?
