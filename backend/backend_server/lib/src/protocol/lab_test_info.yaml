@@ -1,0 +1,9 @@
+class: LabTestInfo
+fields:
+  testId: int
+  testName: String
+  description: String?
+  studentFee: double
+  staffFee: double
+  outsideFee: double
+  available: bool

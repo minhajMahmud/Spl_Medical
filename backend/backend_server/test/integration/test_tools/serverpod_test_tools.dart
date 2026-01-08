@@ -17,8 +17,10 @@ import 'package:serverpod/serverpod.dart' as _i2;
 import 'dart:async' as _i3;
 import 'package:backend_server/src/generated/user_list_item.dart' as _i4;
 import 'package:uuid/uuid.dart' as _i5;
-import 'package:backend_server/src/generated/patient_reponse.dart' as _i6;
-import 'package:backend_server/src/generated/greeting.dart' as _i7;
+import 'package:backend_server/src/generated/lab_test_info.dart' as _i6;
+import 'package:backend_server/src/generated/test_booking_dto.dart' as _i7;
+import 'package:backend_server/src/generated/patient_reponse.dart' as _i8;
+import 'package:backend_server/src/generated/greeting.dart' as _i9;
 import 'package:backend_server/src/generated/protocol.dart';
 import 'package:backend_server/src/generated/endpoints.dart';
 export 'package:serverpod_test/serverpod_test_public_exports.dart';
@@ -1142,6 +1144,322 @@ class _ProfileEndpoint {
       }
     });
   }
+
+  _i3.Future<List<_i6.LabTestInfo>> listLabTests(
+    _i1.TestSessionBuilder sessionBuilder,
+  ) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'profile',
+            method: 'listLabTests',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'profile',
+          methodName: 'listLabTests',
+          parameters: _i1.testObjectToJson({}),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<List<_i6.LabTestInfo>>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
+
+  _i3.Future<List<_i7.TestBookingDto>> listTestBookings(
+    _i1.TestSessionBuilder sessionBuilder,
+  ) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'profile',
+            method: 'listTestBookings',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'profile',
+          methodName: 'listTestBookings',
+          parameters: _i1.testObjectToJson({}),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<List<_i7.TestBookingDto>>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
+
+  _i3.Future<int?> createLabTest(
+    _i1.TestSessionBuilder sessionBuilder, {
+    required String testName,
+    String? description,
+    required double studentFee,
+    required double staffFee,
+    required double outsideFee,
+    required bool available,
+  }) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'profile',
+            method: 'createLabTest',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'profile',
+          methodName: 'createLabTest',
+          parameters: _i1.testObjectToJson({
+            'testName': testName,
+            'description': description,
+            'studentFee': studentFee,
+            'staffFee': staffFee,
+            'outsideFee': outsideFee,
+            'available': available,
+          }),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<int?>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
+
+  _i3.Future<bool> updateLabTest(
+    _i1.TestSessionBuilder sessionBuilder, {
+    required int testId,
+    required String testName,
+    String? description,
+    required double studentFee,
+    required double staffFee,
+    required double outsideFee,
+    required bool available,
+  }) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'profile',
+            method: 'updateLabTest',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'profile',
+          methodName: 'updateLabTest',
+          parameters: _i1.testObjectToJson({
+            'testId': testId,
+            'testName': testName,
+            'description': description,
+            'studentFee': studentFee,
+            'staffFee': staffFee,
+            'outsideFee': outsideFee,
+            'available': available,
+          }),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<bool>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
+
+  _i3.Future<Map<String, dynamic>?> searchPatient(
+    _i1.TestSessionBuilder sessionBuilder, {
+    required String searchTerm,
+  }) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'profile',
+            method: 'searchPatient',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'profile',
+          methodName: 'searchPatient',
+          parameters: _i1.testObjectToJson({'searchTerm': searchTerm}),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<Map<String, dynamic>?>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
+
+  _i3.Future<String> createTestBooking(
+    _i1.TestSessionBuilder sessionBuilder, {
+    required String bookingId,
+    String? patientId,
+    required List<int> testIds,
+    required DateTime bookingDate,
+    required bool isExternalPatient,
+    String? patientType,
+    String? externalPatientName,
+    String? externalPatientEmail,
+    String? externalPatientPhone,
+  }) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'profile',
+            method: 'createTestBooking',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'profile',
+          methodName: 'createTestBooking',
+          parameters: _i1.testObjectToJson({
+            'bookingId': bookingId,
+            'patientId': patientId,
+            'testIds': testIds,
+            'bookingDate': bookingDate,
+            'isExternalPatient': isExternalPatient,
+            'patientType': patientType,
+            'externalPatientName': externalPatientName,
+            'externalPatientEmail': externalPatientEmail,
+            'externalPatientPhone': externalPatientPhone,
+          }),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<String>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
+
+  _i3.Future<bool> uploadTestResult(
+    _i1.TestSessionBuilder sessionBuilder, {
+    required String bookingId,
+    String? testId,
+    String? staffId,
+    required String status,
+    DateTime? resultDate,
+    String? attachmentPath,
+    required bool sendToPatient,
+    required bool sendToDoctor,
+    String? patientEmailOverride,
+    String? doctorEmailOverride,
+    String? attachmentFileName,
+    String? attachmentContentBase64,
+    String? attachmentContentType,
+  }) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'profile',
+            method: 'uploadTestResult',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'profile',
+          methodName: 'uploadTestResult',
+          parameters: _i1.testObjectToJson({
+            'bookingId': bookingId,
+            'testId': testId,
+            'staffId': staffId,
+            'status': status,
+            'resultDate': resultDate,
+            'attachmentPath': attachmentPath,
+            'sendToPatient': sendToPatient,
+            'sendToDoctor': sendToDoctor,
+            'patientEmailOverride': patientEmailOverride,
+            'doctorEmailOverride': doctorEmailOverride,
+            'attachmentFileName': attachmentFileName,
+            'attachmentContentBase64': attachmentContentBase64,
+            'attachmentContentType': attachmentContentType,
+          }),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<bool>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
+
+  _i3.Future<String> downloadTestResult(
+    _i1.TestSessionBuilder sessionBuilder,
+    String bookingId,
+  ) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'profile',
+            method: 'downloadTestResult',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'profile',
+          methodName: 'downloadTestResult',
+          parameters: _i1.testObjectToJson({'bookingId': bookingId}),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<String>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
 }
 
 class _PatientEndpoint {
@@ -1154,7 +1472,7 @@ class _PatientEndpoint {
 
   final _i2.SerializationManager _serializationManager;
 
-  _i3.Future<_i6.PatientProfileDto?> getPatientProfile(
+  _i3.Future<_i8.PatientProfileDto?> getPatientProfile(
     _i1.TestSessionBuilder sessionBuilder,
     String userId,
   ) async {
@@ -1177,7 +1495,7 @@ class _PatientEndpoint {
                   _localUniqueSession,
                   _localCallContext.arguments,
                 )
-                as _i3.Future<_i6.PatientProfileDto?>);
+                as _i3.Future<_i8.PatientProfileDto?>);
         return _localReturnValue;
       } finally {
         await _localUniqueSession.close();
@@ -1237,7 +1555,7 @@ class _GreetingEndpoint {
 
   final _i2.SerializationManager _serializationManager;
 
-  _i3.Future<_i7.Greeting> hello(
+  _i3.Future<_i9.Greeting> hello(
     _i1.TestSessionBuilder sessionBuilder,
     String name,
   ) async {
@@ -1260,7 +1578,7 @@ class _GreetingEndpoint {
                   _localUniqueSession,
                   _localCallContext.arguments,
                 )
-                as _i3.Future<_i7.Greeting>);
+                as _i3.Future<_i9.Greeting>);
         return _localReturnValue;
       } finally {
         await _localUniqueSession.close();

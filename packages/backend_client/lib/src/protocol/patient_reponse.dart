@@ -20,6 +20,7 @@ abstract class PatientProfileDto implements _i1.SerializableModel {
     required this.bloodGroup,
     required this.allergies,
     this.profilePictureUrl,
+    this.role,
   });
 
   factory PatientProfileDto({
@@ -29,6 +30,7 @@ abstract class PatientProfileDto implements _i1.SerializableModel {
     required String bloodGroup,
     required String allergies,
     String? profilePictureUrl,
+    String? role,
   }) = _PatientProfileDtoImpl;
 
   factory PatientProfileDto.fromJson(Map<String, dynamic> jsonSerialization) {
@@ -39,6 +41,7 @@ abstract class PatientProfileDto implements _i1.SerializableModel {
       bloodGroup: jsonSerialization['bloodGroup'] as String,
       allergies: jsonSerialization['allergies'] as String,
       profilePictureUrl: jsonSerialization['profilePictureUrl'] as String?,
+      role: jsonSerialization['role'] as String?,
     );
   }
 
@@ -54,6 +57,8 @@ abstract class PatientProfileDto implements _i1.SerializableModel {
 
   String? profilePictureUrl;
 
+  String? role;
+
   /// Returns a shallow copy of this [PatientProfileDto]
   /// with some or all fields replaced by the given arguments.
   @_i1.useResult
@@ -64,6 +69,7 @@ abstract class PatientProfileDto implements _i1.SerializableModel {
     String? bloodGroup,
     String? allergies,
     String? profilePictureUrl,
+    String? role,
   });
   @override
   Map<String, dynamic> toJson() {
@@ -75,6 +81,7 @@ abstract class PatientProfileDto implements _i1.SerializableModel {
       'bloodGroup': bloodGroup,
       'allergies': allergies,
       if (profilePictureUrl != null) 'profilePictureUrl': profilePictureUrl,
+      if (role != null) 'role': role,
     };
   }
 
@@ -94,6 +101,7 @@ class _PatientProfileDtoImpl extends PatientProfileDto {
     required String bloodGroup,
     required String allergies,
     String? profilePictureUrl,
+    String? role,
   }) : super._(
          name: name,
          email: email,
@@ -101,6 +109,7 @@ class _PatientProfileDtoImpl extends PatientProfileDto {
          bloodGroup: bloodGroup,
          allergies: allergies,
          profilePictureUrl: profilePictureUrl,
+         role: role,
        );
 
   /// Returns a shallow copy of this [PatientProfileDto]
@@ -114,6 +123,7 @@ class _PatientProfileDtoImpl extends PatientProfileDto {
     String? bloodGroup,
     String? allergies,
     Object? profilePictureUrl = _Undefined,
+    Object? role = _Undefined,
   }) {
     return PatientProfileDto(
       name: name ?? this.name,
@@ -124,6 +134,7 @@ class _PatientProfileDtoImpl extends PatientProfileDto {
       profilePictureUrl: profilePictureUrl is String?
           ? profilePictureUrl
           : this.profilePictureUrl,
+      role: role is String? ? role : this.role,
     );
   }
 }

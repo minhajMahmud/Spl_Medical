@@ -155,20 +155,23 @@ class _LabTesterProfileState extends State<LabTesterProfile> {
         name = data['name']?.toString() ?? '';
         email = data['email']?.toString() ?? '';
         phone = data['phone']?.toString() ?? '';
-        department = data['department']?.toString() ?? '';
-        joinedDate = data['joinedDate']?.toString() ?? '';
+        department = data['specialization']?.toString() ?? '';
+        final joiningDateRaw = data['joining_date'];
+        if (joiningDateRaw is DateTime) {
+          joinedDate = joiningDateRaw.toIso8601String().split('T').first;
+          _selectedJoiningDate = joiningDateRaw;
+        } else if (joiningDateRaw != null) {
+          joinedDate = joiningDateRaw.toString();
+          try {
+            _selectedJoiningDate = DateTime.parse(joinedDate);
+          } catch (_) {}
+        }
         qualification = data['qualification']?.toString() ?? '';
-        _profilePictureBase64 = data['profilePictureUrl']?.toString() ?? '';
+        _profilePictureBase64 = data['profile_picture_url']?.toString() ?? '';
         _isLoading = false;
         _nameController.text = name;
         _departmentController.text = department;
         _qualificationController.text = qualification;
-        // try set _selectedJoiningDate from joinedDate if parsable
-        try {
-          if (joinedDate.isNotEmpty) {
-            _selectedJoiningDate = DateTime.parse(joinedDate);
-          }
-        } catch (_) {}
       });
     } catch (e) {
       if (!mounted) return;
@@ -365,15 +368,17 @@ class _LabTesterProfileState extends State<LabTesterProfile> {
       final nm = _nameController.text.trim();
       final spec = _departmentController.text.trim();
       final qual = _qualificationController.text.trim();
-      final res = await client.adminEndpoints.updateStaffProfile(
+
+      // Staff should update their own profile using the patient endpoint
+      final res = await client.patient.updatePatientProfile(
         _userId,
-        name: nm.isEmpty ? null : nm,
-        specialization: spec.isEmpty ? null : spec,
-        qualification: qual.isEmpty ? null : qual,
-        joiningDate: _selectedJoiningDate,
+        nm.isEmpty ? name : nm,
+        phone,
+        '', // allergies not applicable for staff
+        null, // profilePictureData
       );
 
-      if (res == 'OK') {
+      if (res.contains('successfully')) {
         if (!mounted) return false;
         setState(() {
           name = nm.isEmpty ? name : nm;

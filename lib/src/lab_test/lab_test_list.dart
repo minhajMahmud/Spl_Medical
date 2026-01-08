@@ -1,3 +1,5 @@
+import 'package:backend_client/backend_client.dart' as backend;
+
 // Lab test master list with pricing for different patient types
 class LabTest {
   final String testId;
@@ -18,244 +20,90 @@ class LabTest {
     required this.available,
   });
 
+  factory LabTest.fromBackend(Map<String, dynamic> row) {
+    return LabTest(
+      testId: row['test_id']?.toString() ?? '',
+      testName: row['test_name']?.toString() ?? '',
+      description: row['description']?.toString() ?? '',
+      feeStudent: (row['student_fee'] as num?)?.toDouble() ?? 0.0,
+      feeEmployee: (row['staff_fee'] as num?)?.toDouble() ?? 0.0,
+      feeOutPatient: (row['outside_fee'] as num?)?.toDouble() ?? 0.0,
+      available: row['available'] as bool? ?? true,
+    );
+  }
+
+  static Future<List<LabTest>> fetchFromBackend() async {
+    try {
+      // Prefer the generated, strongly-typed endpoint ref.
+      final result = await backend.client.profile.listLabTests();
+
+      if (result.isEmpty) return [];
+
+      // Map backend LabTestInfo models to the UI LabTest model.
+      return result
+          .map(
+            (info) => LabTest(
+              testId: info.testId?.toString() ?? '',
+              testName: info.testName?.toString() ?? '',
+              description: info.description?.toString() ?? '',
+              feeStudent: (info.studentFee as num?)?.toDouble() ?? 0.0,
+              feeEmployee: (info.staffFee as num?)?.toDouble() ?? 0.0,
+              feeOutPatient: (info.outsideFee as num?)?.toDouble() ?? 0.0,
+              available: info.available as bool? ?? true,
+            ),
+          )
+          .toList();
+    } catch (e, st) {
+      // Log the error so it's visible in the console during debugging.
+      // If anything goes wrong, return an empty list so the UI doesn't crash.
+      // ignore: avoid_print
+      print('Failed to load lab tests from backend: $e\n$st');
+      return [];
+    }
+  }
+
   double getFee(String patientType) {
     switch (patientType) {
       case 'student':
         return feeStudent;
       case 'employee':
+      case 'staff':
         return feeEmployee;
       case 'out_patient':
+      case 'outpatient':
         return feeOutPatient;
       default:
-        return feeStudent;
+        return feeOutPatient; // Default to outpatient fee
     }
   }
 }
 
-List<LabTest> labTests = [
-  LabTest(
-    testId: "01",
-    testName: "Hb%",
-    description: "Hemoglobin test",
-    feeStudent: 60.0,
-    feeEmployee: 80.0,
-    feeOutPatient: 100.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "02",
-    testName: "CBC",
-    description: "Complete Blood Count",
-    feeStudent: 200.0,
-    feeEmployee: 230.0,
-    feeOutPatient: 280.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "03",
-    testName: "Lipid Profile",
-    description: "CHO, TG, HDL, LDL",
-    feeStudent: 450.0,
-    feeEmployee: 500.0,
-    feeOutPatient: 600.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "04",
-    testName: "Serum Bilirubin Total",
-    description: "Serum Bilirubin Total",
-    feeStudent: 120.0,
-    feeEmployee: 150.0,
-    feeOutPatient: 200.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "05",
-    testName: "SGPT",
-    description: "SGPT",
-    feeStudent: 130.0,
-    feeEmployee: 150.0,
-    feeOutPatient: 220.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "06",
-    testName: "SGOT",
-    description: "SGOT",
-    feeStudent: 130.0,
-    feeEmployee: 150.0,
-    feeOutPatient: 220.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "07",
-    testName: "Serum Creatinine",
-    description: "Serum Creatinine",
-    feeStudent: 100.0,
-    feeEmployee: 120.0,
-    feeOutPatient: 200.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "08",
-    testName: "Glucose (Single Sample)",
-    description: "Glucose (Single Sample)",
-    feeStudent: 60.0,
-    feeEmployee: 80.0,
-    feeOutPatient: 100.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "09",
-    testName: "Serum Uric Acid",
-    description: "Serum Uric Acid",
-    feeStudent: 120.0,
-    feeEmployee: 150.0,
-    feeOutPatient: 220.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "10",
-    testName: "Serum Calcium",
-    description: "Serum Calcium",
-    feeStudent: 150.0,
-    feeEmployee: 200.0,
-    feeOutPatient: 250.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "11",
-    testName: "HbA1C",
-    description: "HbA1C",
-    feeStudent: 300.0,
-    feeEmployee: 350.0,
-    feeOutPatient: 500.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "12",
-    testName: "Blood Grouping & Rh Factor",
-    description: "Blood Grouping & Rh Factor",
-    feeStudent: 100.0,
-    feeEmployee: 120.0,
-    feeOutPatient: 150.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "13",
-    testName: "CRP (Titre)",
-    description: "CRP (Titre)",
-    feeStudent: 150.0,
-    feeEmployee: 180.0,
-    feeOutPatient: 250.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "14",
-    testName: "RA",
-    description: "RA",
-    feeStudent: 150.0,
-    feeEmployee: 180.0,
-    feeOutPatient: 250.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "15",
-    testName: "ASO",
-    description: "ASO",
-    feeStudent: 180.0,
-    feeEmployee: 220.0,
-    feeOutPatient: 300.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "16",
-    testName: "Widal",
-    description: "Widal",
-    feeStudent: 150.0,
-    feeEmployee: 200.0,
-    feeOutPatient: 250.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "17",
-    testName: "Febrile Antigen",
-    description: "Febrile Antigen",
-    feeStudent: 300.0,
-    feeEmployee: 400.0,
-    feeOutPatient: 500.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "18",
-    testName: "HBsAg (ICT)",
-    description: "HBsAg (ICT)",
-    feeStudent: 120.0,
-    feeEmployee: 150.0,
-    feeOutPatient: 200.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "19",
-    testName: "Syphilis/TPHA (ICT)",
-    description: "Syphilis/TPHA (ICT)",
-    feeStudent: 100.0,
-    feeEmployee: 120.0,
-    feeOutPatient: 160.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "20",
-    testName: "Dengue Ns1",
-    description: "Dengue Ns1",
-    feeStudent: 200.0,
-    feeEmployee: 220.0,
-    feeOutPatient: 250.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "21",
-    testName: "Dengue IgG/IgM",
-    description: "Dengue IgG/IgM",
-    feeStudent: 250.0,
-    feeEmployee: 250.0,
-    feeOutPatient: 350.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "22",
-    testName: "Malaria Parasite",
-    description: "Malaria Parasite",
-    feeStudent: 150.0,
-    feeEmployee: 200.0,
-    feeOutPatient: 250.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "23",
-    testName: "Pregnancy Test (ICT)",
-    description: "Pregnancy Test (ICT)",
-    feeStudent: 80.0,
-    feeEmployee: 100.0,
-    feeOutPatient: 120.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "24",
-    testName: "Urine R/M/E",
-    description: "Urine R/M/E",
-    feeStudent: 60.0,
-    feeEmployee: 80.0,
-    feeOutPatient: 100.0,
-    available: true,
-  ),
-  LabTest(
-    testId: "25",
-    testName: "Dope Test (5 Parameters)",
-    description: "Dope Test (5 Parameters)",
-    feeStudent: 600.0,
-    feeEmployee: 700.0,
-    feeOutPatient: 700.0,
-    available: true,
-  ),
-];
+// Lab Test Categories for different user types
+enum PatientType { student, employee, outPatient }
+
+extension PatientTypeExt on PatientType {
+  String get displayName {
+    switch (this) {
+      case PatientType.student:
+        return 'Student';
+      case PatientType.employee:
+        return 'Employee';
+      case PatientType.outPatient:
+        return 'Out Patient';
+    }
+  }
+
+  String get value {
+    switch (this) {
+      case PatientType.student:
+        return 'student';
+      case PatientType.employee:
+        return 'employee';
+      case PatientType.outPatient:
+        return 'out_patient';
+    }
+  }
+}
+
+// NOTE: The old hard-coded labTests list has been removed.
+// All lab test pricing now comes from the backend (lab_tests table).

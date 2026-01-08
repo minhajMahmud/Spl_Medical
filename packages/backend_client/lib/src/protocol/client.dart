@@ -14,9 +14,11 @@ import 'package:serverpod_client/serverpod_client.dart' as _i1;
 import 'dart:async' as _i2;
 import 'package:backend_client/src/protocol/user_list_item.dart' as _i3;
 import 'package:uuid/uuid.dart' as _i4;
-import 'package:backend_client/src/protocol/patient_reponse.dart' as _i5;
-import 'package:backend_client/src/protocol/greeting.dart' as _i6;
-import 'protocol.dart' as _i7;
+import 'package:backend_client/src/protocol/lab_test_info.dart' as _i5;
+import 'package:backend_client/src/protocol/test_booking_dto.dart' as _i6;
+import 'package:backend_client/src/protocol/patient_reponse.dart' as _i7;
+import 'package:backend_client/src/protocol/greeting.dart' as _i8;
+import 'protocol.dart' as _i9;
 
 /// AdminEndpoints: server-side methods used by the admin UI to manage users,
 /// inventory, rosters, audit logs and notifications.
@@ -399,6 +401,182 @@ class EndpointProfile extends _i1.EndpointRef {
       'qualification': qualification,
     },
   );
+
+  /// List all lab tests from the lab_tests table.
+  /// Returns strongly-typed LabTestInfo models so the Flutter app
+  /// can deserialize them safely.
+  _i2.Future<List<_i5.LabTestInfo>> listLabTests() =>
+      caller.callServerEndpoint<List<_i5.LabTestInfo>>(
+        'profile',
+        'listLabTests',
+        {},
+      );
+
+  /// List all lab test bookings with basic joined information for dashboard.
+  ///
+  /// Returns one [protocol.TestBookingDto] per booking-test pairing.
+  _i2.Future<List<_i6.TestBookingDto>> listTestBookings() =>
+      caller.callServerEndpoint<List<_i6.TestBookingDto>>(
+        'profile',
+        'listTestBookings',
+        {},
+      );
+
+  /// Insert a new lab test into lab_tests and return the generated test_id.
+  _i2.Future<int?> createLabTest({
+    required String testName,
+    String? description,
+    required double studentFee,
+    required double staffFee,
+    required double outsideFee,
+    required bool available,
+  }) => caller.callServerEndpoint<int?>(
+    'profile',
+    'createLabTest',
+    {
+      'testName': testName,
+      'description': description,
+      'studentFee': studentFee,
+      'staffFee': staffFee,
+      'outsideFee': outsideFee,
+      'available': available,
+    },
+  );
+
+  /// Update an existing lab test. All fields are required to keep the query
+  /// simple on the client side.
+  _i2.Future<bool> updateLabTest({
+    required int testId,
+    required String testName,
+    String? description,
+    required double studentFee,
+    required double staffFee,
+    required double outsideFee,
+    required bool available,
+  }) => caller.callServerEndpoint<bool>(
+    'profile',
+    'updateLabTest',
+    {
+      'testId': testId,
+      'testName': testName,
+      'description': description,
+      'studentFee': studentFee,
+      'staffFee': staffFee,
+      'outsideFee': outsideFee,
+      'available': available,
+    },
+  );
+
+  /// Search for a patient/user by user_id, email, or phone number.
+  /// Returns user details if found, null otherwise.
+  _i2.Future<Map<String, dynamic>?> searchPatient({
+    required String searchTerm,
+  }) => caller.callServerEndpoint<Map<String, dynamic>?>(
+    'profile',
+    'searchPatient',
+    {'searchTerm': searchTerm},
+  );
+
+  /// Create separate test bookings for each selected test.
+  ///
+  /// IMPORTANT: This method creates ONE BOOKING PER TEST, not a single booking with multiple tests.
+  ///
+  /// Business Logic:
+  /// - If patient selects [CBC, SGPT], creates 2 separate bookings
+  /// - Each booking has its own booking_id and booking_code
+  /// - Each booking can have its own result file uploaded independently
+  /// - One-to-one relationship: 1 booking = 1 test
+  ///
+  /// Patient ID Resolution:
+  /// - If patientId matches a user_id from database: uses actual user_id, is_external_patient=false
+  /// - If patientId is a generated ID (>= 1000000): stores as external patient
+  /// - If patientId not found in database: marks as external patient
+  ///
+  /// Returns a comma-separated list of booking codes (e.g., "BK000001,BK000002,BK000003")
+  /// Returns empty string "" on failure.
+  _i2.Future<String> createTestBooking({
+    required String bookingId,
+    String? patientId,
+    required List<int> testIds,
+    required DateTime bookingDate,
+    required bool isExternalPatient,
+    String? patientType,
+    String? externalPatientName,
+    String? externalPatientEmail,
+    String? externalPatientPhone,
+  }) => caller.callServerEndpoint<String>(
+    'profile',
+    'createTestBooking',
+    {
+      'bookingId': bookingId,
+      'patientId': patientId,
+      'testIds': testIds,
+      'bookingDate': bookingDate,
+      'isExternalPatient': isExternalPatient,
+      'patientType': patientType,
+      'externalPatientName': externalPatientName,
+      'externalPatientEmail': externalPatientEmail,
+      'externalPatientPhone': externalPatientPhone,
+    },
+  );
+
+  /// Upload or update a test result entry for a specific booking test.
+  ///
+  /// This writes to the `test_results` table with a reference to booking_tests.
+  /// Since a booking can have multiple tests (via booking_tests junction table),
+  /// this endpoint handles results for individual test entries.
+  ///
+  /// The result references booking_test_id (the junction table record),
+  /// which links to both a booking and a test.
+  _i2.Future<bool> uploadTestResult({
+    required String bookingId,
+    String? testId,
+    String? staffId,
+    required String status,
+    DateTime? resultDate,
+    String? attachmentPath,
+    required bool sendToPatient,
+    required bool sendToDoctor,
+    String? patientEmailOverride,
+    String? doctorEmailOverride,
+    String? attachmentFileName,
+    String? attachmentContentBase64,
+    String? attachmentContentType,
+  }) => caller.callServerEndpoint<bool>(
+    'profile',
+    'uploadTestResult',
+    {
+      'bookingId': bookingId,
+      'testId': testId,
+      'staffId': staffId,
+      'status': status,
+      'resultDate': resultDate,
+      'attachmentPath': attachmentPath,
+      'sendToPatient': sendToPatient,
+      'sendToDoctor': sendToDoctor,
+      'patientEmailOverride': patientEmailOverride,
+      'doctorEmailOverride': doctorEmailOverride,
+      'attachmentFileName': attachmentFileName,
+      'attachmentContentBase64': attachmentContentBase64,
+      'attachmentContentType': attachmentContentType,
+    },
+  );
+
+  /// Download the test result file for a specific booking.
+  ///
+  /// Returns a JSON string containing:
+  /// {
+  ///   "filename": "report.pdf",
+  ///   "contentType": "application/pdf",
+  ///   "data": "base64_encoded_content..."
+  /// }
+  /// Returns empty string if not found or error.
+  _i2.Future<String> downloadTestResult(String bookingId) =>
+      caller.callServerEndpoint<String>(
+        'profile',
+        'downloadTestResult',
+        {'bookingId': bookingId},
+      );
 }
 
 /// {@category Endpoint}
@@ -408,8 +586,8 @@ class EndpointPatient extends _i1.EndpointRef {
   @override
   String get name => 'patient';
 
-  _i2.Future<_i5.PatientProfileDto?> getPatientProfile(String userId) =>
-      caller.callServerEndpoint<_i5.PatientProfileDto?>(
+  _i2.Future<_i7.PatientProfileDto?> getPatientProfile(String userId) =>
+      caller.callServerEndpoint<_i7.PatientProfileDto?>(
         'patient',
         'getPatientProfile',
         {'userId': userId},
@@ -444,8 +622,8 @@ class EndpointGreeting extends _i1.EndpointRef {
   String get name => 'greeting';
 
   /// Returns a personalized greeting message: "Hello {name}".
-  _i2.Future<_i6.Greeting> hello(String name) =>
-      caller.callServerEndpoint<_i6.Greeting>(
+  _i2.Future<_i8.Greeting> hello(String name) =>
+      caller.callServerEndpoint<_i8.Greeting>(
         'greeting',
         'hello',
         {'name': name},
@@ -472,7 +650,7 @@ class Client extends _i1.ServerpodClientShared {
     bool? disconnectStreamsOnLostInternetConnection,
   }) : super(
          host,
-         _i7.Protocol(),
+         _i9.Protocol(),
          securityContext: securityContext,
          streamingConnectionTimeout: streamingConnectionTimeout,
          connectionTimeout: connectionTimeout,

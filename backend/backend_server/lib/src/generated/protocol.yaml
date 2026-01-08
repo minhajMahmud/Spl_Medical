@@ -27,6 +27,14 @@ profile:
   - getProfile:
   - changePassword:
   - updateProfile:
+  - listLabTests:
+  - listTestBookings:
+  - createLabTest:
+  - updateLabTest:
+  - searchPatient:
+  - createTestBooking:
+  - uploadTestResult:
+  - downloadTestResult:
 patient:
   - getPatientProfile:
   - updatePatientProfile:

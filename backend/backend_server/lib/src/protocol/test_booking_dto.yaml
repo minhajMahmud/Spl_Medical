@@ -1,0 +1,14 @@
+class: TestBookingDto
+fields:
+  bookingId: String
+  patientId: String?
+  testId: int
+  bookingDate: String
+  isExternalPatient: bool
+  patientType: String
+  status: String
+  patientName: String?
+  patientEmail: String?
+  patientPhone: String?
+  testName: String
+  outsideFee: double

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -16,7 +15,7 @@ class _PatientReportUploadState extends State<PatientReportUpload> {
   // Controllers
   final TextEditingController _dateController = TextEditingController();
   String? _selectedType;
-  File? _selectedFile;
+  PlatformFile? _selectedFile;
 
   // SRS Compliance: Allowed report types
   final List<String> _reportTypes = [
@@ -35,9 +34,10 @@ class _PatientReportUploadState extends State<PatientReportUpload> {
       allowedExtensions: ["pdf", "jpg", "jpeg", "png"],
     );
 
-    if (result != null && result.files.single.path != null) {
+    if (result != null && result.files.isNotEmpty) {
       setState(() {
-        _selectedFile = File(result.files.single.path!);
+        // On web, `path` can be null, so we store the PlatformFile directly
+        _selectedFile = result.files.single;
       });
     }
   }
@@ -208,7 +208,7 @@ class _PatientReportUploadState extends State<PatientReportUpload> {
                         Padding(
                           padding: const EdgeInsets.only(top: 5.0),
                           child: Text(
-                            _selectedFile!.path.split('/').last,
+                            _selectedFile!.name,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 14,

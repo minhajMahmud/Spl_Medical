@@ -1,4 +1,6 @@
 import 'package:backend_server/src/birthday_reminder.dart';
+import 'package:serverpod/protocol.dart' as serverpod_protocol;
+
 import 'package:serverpod/serverpod.dart';
 
 import 'package:backend_server/src/web/routes/root.dart';

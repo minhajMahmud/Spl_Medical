@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:backend_client/backend_client.dart' as backend;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -5,6 +10,11 @@ class TestResult {
   final String resultId;
   final String bookingId;
   final String patientName;
+  final String patientType;
+  final String? patientId;
+  final String patientEmail;
+  final String? doctorId;
+  final String? doctorEmail;
   final String testName;
   final String status;
   final String? resultValue;
@@ -16,6 +26,11 @@ class TestResult {
     required this.resultId,
     required this.bookingId,
     required this.patientName,
+    required this.patientType,
+    this.patientId,
+    required this.patientEmail,
+    this.doctorId,
+    this.doctorEmail,
     required this.testName,
     required this.status,
     this.resultValue,
@@ -35,729 +50,553 @@ class LabTestResults extends StatefulWidget {
 class _LabTestResultsState extends State<LabTestResults> {
   bool _isDarkMode = true;
 
-  final List<TestResult> _testResults = [
-    TestResult(
-      resultId: "RES001",
-      bookingId: "BK001",
-      patientName: "Rafi Ahmed",
-      testName: "CBC",
-      status: "COMPLETED",
-      resultValue: "Normal",
-      normalRange: "Normal",
-      resultDate: DateTime(2024, 1, 15),
-    ),
-    TestResult(
-      resultId: "RES002",
-      bookingId: "BK002",
-      patientName: "Maya Rahman",
-      testName: "Blood Glucose",
-      status: "PENDING",
-    ),
-    TestResult(
-      resultId: "RES003",
-      bookingId: "BK003",
-      patientName: "Barsha Khan",
-      testName: "Lipid Profile",
-      status: "COMPLETED",
-      resultValue: "CHO: 180 mg/dL\nTG: 150 mg/dL",
-      normalRange: "CHO: <200 mg/dL\nTG: <150 mg/dL",
-      resultDate: DateTime(2024, 1, 14),
-    ),
-  ];
-
   final TextEditingController _resultController = TextEditingController();
   final TextEditingController _rangeController = TextEditingController();
+
+  /// One entry per test for each booking.
+  /// Example: if a booking has tests A1 and A2, this list will contain
+  /// two [TestResult] items so each test has its own separate upload option.
+  List<TestResult> _testResults = [];
 
   @override
   void initState() {
     super.initState();
-    _loadThemePreference();
+    _loadTheme();
+    _loadResultsFromBookings();
   }
 
-  Future<void> _loadThemePreference() async {
+  Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isDarkMode = prefs.getBool('isDarkMode') ?? true;
-    });
+    setState(() => _isDarkMode = prefs.getBool('isDarkMode') ?? true);
   }
 
-  Future<void> _saveThemePreference(bool isDark) async {
+  Future<void> _saveTheme(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isDarkMode', isDark);
+    await prefs.setBool('isDarkMode', value);
   }
+
+  /// Load all lab test bookings and expand them so each individual test
+  /// becomes its own [TestResult] row.
+  Future<void> _loadResultsFromBookings() async {
+    final prefs = await SharedPreferences.getInstance();
+    // 1) Expand locally stored bookings from SharedPreferences
+    final rawList = prefs.getStringList('lab_test_bookings') ?? [];
+
+    final Map<String, TestResult> resultsById = {};
+
+    for (final encoded in rawList) {
+      try {
+        final Map<String, dynamic> booking =
+            jsonDecode(encoded) as Map<String, dynamic>;
+
+        final String bookingId = booking['bookingId']?.toString() ?? '';
+        if (bookingId.isEmpty) continue;
+
+        // Safely extract string values, handling potential byte arrays
+        final patientRaw = booking['patient'];
+        final String patientName = patientRaw is String
+            ? patientRaw
+            : (patientRaw?.toString().startsWith('Instance of') ?? false)
+            ? 'Unknown Patient'
+            : patientRaw?.toString() ?? '';
+
+        final String patientType = booking['patientType']?.toString() ?? '';
+        final String? patientId = booking['patientId']?.toString();
+
+        final emailRaw = booking['patientEmail'];
+        final String patientEmail = emailRaw is String
+            ? emailRaw
+            : (emailRaw?.toString().startsWith('Instance of') ?? false)
+            ? ''
+            : emailRaw?.toString() ?? '';
+
+        final List tests = booking['tests'] as List? ?? [];
+
+        for (final t in tests) {
+          final Map<String, dynamic> test = t as Map<String, dynamic>;
+
+          final String testId = test['testId']?.toString() ?? '';
+          final String testName = test['test']?.toString() ?? '';
+          if (testId.isEmpty) continue;
+
+          final id = '${bookingId}_$testId';
+          resultsById[id] = TestResult(
+            resultId: id,
+            bookingId: bookingId,
+            patientName: patientName,
+            patientType: patientType,
+            patientId: patientId,
+            patientEmail: patientEmail,
+            doctorId: null,
+            doctorEmail: null,
+            testName: testName,
+            status: 'PENDING',
+          );
+        }
+      } catch (_) {
+        // Ignore malformed entries and continue.
+      }
+    }
+
+    // 2) Also expand bookings from backend database so that
+    //    previous bookings stored in DB show up even after app restart.
+    try {
+      // Use generated profile endpoint that exposes the booking listing
+      // (server-side name is ProfileEndpoint.listTestBookings).
+      final rows = await backend.client.profile.listTestBookings();
+      print('DEBUG: Loaded ${rows.length} test results from backend');
+
+      for (final row in rows) {
+        final String bookingId = row.bookingId;
+        if (bookingId.isEmpty) continue;
+
+        final bool isExternal = row.isExternalPatient;
+        final String patientName =
+            row.patientName ??
+            (isExternal ? 'Walk-in Patient' : 'Unknown Patient');
+        final String patientEmail = row.patientEmail ?? '';
+
+        final String testId = row.testId.toString();
+        final String testName = row.testName;
+        if (testId.isEmpty) continue;
+
+        final String rawStatus = row.status.isEmpty ? 'PENDING' : row.status;
+        final String patientType = row.patientType.isEmpty
+            ? 'outpatient'
+            : row.patientType;
+
+        final String id = '${bookingId}_$testId';
+        resultsById[id] = TestResult(
+          resultId: id,
+          bookingId: bookingId,
+          patientName: patientName,
+          patientType: patientType,
+          patientId: isExternal ? 'WALKIN:$bookingId' : row.patientId,
+          patientEmail: patientEmail,
+          doctorId: null,
+          doctorEmail: null,
+          testName: testName,
+          status: rawStatus,
+        );
+      }
+
+      print('DEBUG: Processed ${resultsById.length} test results total');
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('Error loading results from backend: $e\n$st');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading test results: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _testResults = resultsById.values.toList();
+      });
+    }
+  }
+
+  // ======================== UPLOAD RESULT ========================
 
   void _uploadResult(int index) {
+    bool sendToPatient = true;
+    bool sendToDoctor = true;
+    String? selectedFileName;
+    String? selectedFilePath;
+
+    final test = _testResults[index];
+    final TextEditingController doctorIdController = TextEditingController(
+      text: test.doctorId ?? '',
+    );
+    final TextEditingController doctorEmailController = TextEditingController(
+      text: test.doctorEmail ?? '',
+    );
+
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [const Color(0xFF7C3AED), const Color(0xFF6D28D9)],
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Upload Test Result',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+      builder: (context) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // HEADER
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+                      ),
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(16),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Patient: ${_testResults[index].patientName}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.science,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Test: ${_testResults[index].testName}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Result Information',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _resultController,
-                      decoration: InputDecoration(
-                        labelText: 'Result Value',
-                        hintText: 'Enter test result...',
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF7C3AED),
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _rangeController,
-                      decoration: InputDecoration(
-                        labelText: 'Normal Range',
-                        hintText: 'e.g., 4.5-11.0 x10^9/L',
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF7C3AED),
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Divider(color: Colors.grey[300]),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Alternative: Upload File',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _selectFile(),
-                        icon: const Icon(Icons.attach_file),
-                        label: const Text('Choose File'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[200],
-                          foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _resultController.clear();
-                        _rangeController.clear();
-                      },
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        _saveResult(index);
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(Icons.check),
-                      label: const Text('Save Result'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF7C3AED),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _selectFile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('File selection would be implemented here')),
-    );
-  }
-
-  void _saveResult(int index) {
-    setState(() {
-      _testResults[index] = TestResult(
-        resultId: _testResults[index].resultId,
-        bookingId: _testResults[index].bookingId,
-        patientName: _testResults[index].patientName,
-        testName: _testResults[index].testName,
-        status: "COMPLETED",
-        resultValue: _resultController.text,
-        normalRange: _rangeController.text,
-        resultDate: DateTime.now(),
-      );
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Result for ${_testResults[index].testName} uploaded successfully',
-        ),
-        backgroundColor: Colors.green,
-      ),
-    );
-
-    _resultController.clear();
-    _rangeController.clear();
-  }
-
-  void _viewResultDetails(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Gradient Header
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: _testResults[index].resultValue != null
-                        ? [const Color(0xFF10B981), const Color(0xFF059669)]
-                        : [const Color(0xFFF59E0B), const Color(0xFFD97706)],
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            '${_testResults[index].testName} Result',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                        const Text(
+                          'Upload Test Result',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _testResults[index].resultValue != null
-                                ? 'COMPLETED'
-                                : 'PENDING',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Patient: ${test.patientName}\nTest: ${test.testName}',
+                          style: const TextStyle(color: Colors.white),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Test Details',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Content Section
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Patient & Booking Info
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.person,
-                                color: Color(0xFF7C3AED),
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Patient: ${_testResults[index].patientName}',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                  ),
+
+                  // BODY
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        // Result entry
+                        TextFormField(
+                          controller: _resultController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: 'Result Value',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _rangeController,
+                          decoration: const InputDecoration(
+                            labelText: 'Normal Range',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Auto-filled patient & doctor info
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Patient & Doctor Info',
+                            style: Theme.of(dialogContext).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (test.patientId != null) ...[
+                          TextFormField(
+                            readOnly: true,
+                            initialValue: test.patientId,
+                            decoration: const InputDecoration(
+                              labelText: 'Patient ID',
+                              prefixIcon: Icon(Icons.badge),
+                              border: OutlineInputBorder(),
+                            ),
                           ),
                           const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.bookmark,
-                                color: Color(0xFF7C3AED),
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Booking ID: ${_testResults[index].bookingId}',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_testResults[index].resultValue != null) ...[
-                      // Result Value (Green)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withOpacity(0.1),
-                          border: Border(
-                            left: BorderSide(
-                              color: const Color(0xFF10B981),
-                              width: 4,
-                            ),
+                        TextFormField(
+                          readOnly: true,
+                          initialValue: test.patientEmail,
+                          decoration: const InputDecoration(
+                            labelText: 'Patient Email',
+                            prefixIcon: Icon(Icons.email),
+                            border: OutlineInputBorder(),
                           ),
-                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Result Value',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _testResults[index].resultValue!,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF10B981),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Normal Range (Blue)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.05),
-                          border: Border(
-                            left: BorderSide(color: Colors.blue, width: 4),
+                        const SizedBox(height: 12),
+                        // Doctor info: editable so lab staff can enter/update
+                        TextFormField(
+                          controller: doctorIdController,
+                          decoration: const InputDecoration(
+                            labelText: 'Doctor ID (optional)',
+                            prefixIcon: Icon(Icons.badge_outlined),
+                            border: OutlineInputBorder(),
                           ),
-                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Normal Range',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _testResults[index].normalRange ?? 'N/A',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.blue,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Date (Grey)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          border: Border(
-                            left: BorderSide(
-                              color: Colors.grey[400]!,
-                              width: 4,
-                            ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: doctorEmailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Doctor Email (optional)',
+                            prefixIcon: Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(),
                           ),
-                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Date',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
+                        const SizedBox(height: 16),
+
+                        CheckboxListTile(
+                          title: const Text('Send to Patient'),
+                          subtitle: Text(test.patientEmail),
+                          value: sendToPatient,
+                          onChanged: (v) =>
+                              setDialogState(() => sendToPatient = v ?? true),
+                        ),
+
+                        CheckboxListTile(
+                          title: const Text('Send to Doctor'),
+                          subtitle: Text(
+                            doctorEmailController.text.isEmpty
+                                ? 'Enter doctor email above'
+                                : doctorEmailController.text,
+                          ),
+                          value: sendToDoctor,
+                          onChanged: (v) =>
+                              setDialogState(() => sendToDoctor = v ?? true),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // File attach section (PDF / documents)
+                        const Divider(),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Attach PDF / Document (optional)',
+                            style: Theme.of(dialogContext).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final result = await FilePicker.platform
+                                  .pickFiles(
+                                    type: FileType.custom,
+                                    allowedExtensions: ['pdf', 'doc', 'docx'],
+                                  );
+
+                              if (result == null || result.files.isEmpty) {
+                                return;
+                              }
+
+                              final file = result.files.single;
+
+                              setDialogState(() {
+                                selectedFileName = file.name;
+                                selectedFilePath = file.path;
+                              });
+                            },
+                            icon: const Icon(Icons.attach_file),
+                            label: const Text('Choose File'),
+                          ),
+                        ),
+                        if (selectedFileName != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Row(
                               children: [
-                                const Icon(
-                                  Icons.calendar_today,
-                                  size: 14,
-                                  color: Colors.grey,
-                                ),
+                                const Icon(Icons.description, size: 16),
                                 const SizedBox(width: 6),
-                                Text(
-                                  _testResults[index].resultDate
-                                          ?.toString()
-                                          .split(' ')[0] ??
-                                      'N/A',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey[700],
+                                Expanded(
+                                  child: Text(
+                                    selectedFileName!,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ),
-                    ] else ...[
-                      // Pending Info (Orange)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFEDEBD),
-                          border: Border.all(
-                            color: const Color(0xFFF59E0B).withOpacity(0.3),
                           ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.info_outline,
-                              color: Color(0xFFF59E0B),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Result is pending. Upload the result when available.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[800],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              // Action Buttons
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'),
+                      ],
                     ),
-                    if (_testResults[index].status == "PENDING")
-                      const SizedBox(width: 12),
-                    if (_testResults[index].status == "PENDING")
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _uploadResult(index);
-                        },
-                        icon: const Icon(Icons.upload),
-                        label: const Text('Upload Result'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF7C3AED),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
+                  ),
+
+                  // FOOTER
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              final hasTextResult = _resultController.text
+                                  .trim()
+                                  .isNotEmpty;
+                              final hasFile = selectedFilePath != null;
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case "COMPLETED":
-        return Colors.green;
-      case "PENDING":
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
-  }
+                              if (!hasTextResult && !hasFile) {
+                                ScaffoldMessenger.of(
+                                  dialogContext,
+                                ).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Please enter a result value or attach a file.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
 
-  @override
-  Widget build(BuildContext context) {
-    final bgColor = _isDarkMode ? const Color(0xFF1A1F2E) : Colors.grey[50]!;
-    final cardColor = _isDarkMode ? const Color(0xFF252B3D) : Colors.white;
-    final textColor = _isDarkMode ? Colors.white : Colors.black87;
-    final subtextColor = _isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
+                              final now = DateTime.now();
 
-    return Scaffold(
-      backgroundColor: bgColor,
-      appBar: AppBar(
-        title: Text(
-          'Test Results Management',
-          style: TextStyle(color: textColor),
-        ),
-        backgroundColor: cardColor,
-        iconTheme: IconThemeData(color: textColor),
-        actions: [
-          IconButton(
-            icon: Icon(
-              _isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: textColor,
-            ),
-            onPressed: () {
-              setState(() {
-                _isDarkMode = !_isDarkMode;
-                _saveThemePreference(_isDarkMode);
-              });
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.filter_list, color: textColor),
-            onPressed: () => _showFilterDialog(),
-          ),
-        ],
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _testResults.length,
-        itemBuilder: (context, index) {
-          final result = _testResults[index];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            color: cardColor,
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(16),
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _getStatusColor(result.status).withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  result.status == "COMPLETED" ? Icons.task_alt : Icons.pending,
-                  color: _getStatusColor(result.status),
-                ),
-              ),
-              title: Text(
-                result.testName,
-                style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Patient: ${result.patientName}',
-                    style: TextStyle(color: subtextColor),
-                  ),
-                  Text(
-                    'Status: ${result.status}',
-                    style: TextStyle(color: subtextColor),
-                  ),
-                  if (result.resultDate != null)
-                    Text(
-                      'Date: ${result.resultDate!.toString().split(' ')[0]}',
-                      style: TextStyle(color: subtextColor),
+                              setState(() {
+                                _testResults[index] = TestResult(
+                                  resultId: test.resultId,
+                                  bookingId: test.bookingId,
+                                  patientName: test.patientName,
+                                  patientType: test.patientType,
+                                  patientId: test.patientId,
+                                  patientEmail: test.patientEmail,
+                                  doctorId: doctorIdController.text.isNotEmpty
+                                      ? doctorIdController.text
+                                      : null,
+                                  doctorEmail:
+                                      doctorEmailController.text.isNotEmpty
+                                      ? doctorEmailController.text
+                                      : null,
+                                  testName: test.testName,
+                                  status: 'COMPLETED',
+                                  resultValue: hasTextResult
+                                      ? _resultController.text
+                                      : test.resultValue,
+                                  normalRange: hasTextResult
+                                      ? _rangeController.text
+                                      : test.normalRange,
+                                  attachmentPath:
+                                      selectedFilePath ?? test.attachmentPath,
+                                  resultDate: now,
+                                );
+                              });
+
+                              try {
+                                String? base64Content;
+                                String? mimeType;
+                                String? fileName;
+
+                                if (selectedFilePath != null &&
+                                    selectedFilePath!.isNotEmpty) {
+                                  try {
+                                    final file = File(selectedFilePath!);
+                                    if (await file.exists()) {
+                                      final bytes = await file.readAsBytes();
+                                      base64Content = base64Encode(bytes);
+                                      fileName = selectedFileName;
+                                      if (fileName != null &&
+                                          fileName.toLowerCase().endsWith(
+                                            '.pdf',
+                                          )) {
+                                        mimeType = 'application/pdf';
+                                      } else if (fileName != null &&
+                                          (fileName.toLowerCase().endsWith(
+                                                '.jpg',
+                                              ) ||
+                                              fileName.toLowerCase().endsWith(
+                                                '.jpeg',
+                                              ))) {
+                                        mimeType = 'image/jpeg';
+                                      } else if (fileName != null &&
+                                          fileName.toLowerCase().endsWith(
+                                            '.png',
+                                          )) {
+                                        mimeType = 'image/png';
+                                      } else if (fileName != null &&
+                                          (fileName.toLowerCase().endsWith(
+                                                '.doc',
+                                              ) ||
+                                              fileName.toLowerCase().endsWith(
+                                                '.docx',
+                                              ))) {
+                                        mimeType =
+                                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                                      } else {
+                                        mimeType = 'application/octet-stream';
+                                      }
+                                    }
+                                  } catch (_) {
+                                    // ignore file read errors; backend call will
+                                    // still go through without attachment.
+                                  }
+                                }
+
+                                await backend.client.profile.uploadTestResult(
+                                  bookingId: test.bookingId,
+                                  staffId: doctorIdController.text.isNotEmpty
+                                      ? doctorIdController.text.trim()
+                                      : null,
+                                  status: 'COMPLETED',
+                                  resultDate: now,
+                                  attachmentPath:
+                                      selectedFilePath ?? test.attachmentPath,
+                                  sendToPatient: sendToPatient,
+                                  sendToDoctor: sendToDoctor,
+                                  patientEmailOverride: sendToPatient
+                                      ? test.patientEmail
+                                      : null,
+                                  doctorEmailOverride:
+                                      sendToDoctor &&
+                                          doctorEmailController.text
+                                              .trim()
+                                              .isNotEmpty
+                                      ? doctorEmailController.text.trim()
+                                      : null,
+                                  attachmentFileName: fileName,
+                                  attachmentContentBase64: base64Content,
+                                  attachmentContentType: mimeType,
+                                );
+                              } catch (e, st) {
+                                // ignore: avoid_print
+                                print(
+                                  'Failed to upload result to backend: $e\n$st',
+                                );
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Result saved locally but failed to sync with server.',
+                                      ),
+                                      backgroundColor: Colors.orange,
+                                    ),
+                                  );
+                                }
+                              }
+
+                              _resultController.clear();
+                              _rangeController.clear();
+                              Navigator.pop(dialogContext);
+
+                              // Reload results to show updated status
+                              await _loadResultsFromBookings();
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Result uploaded successfully!',
+                                    ),
+                                    backgroundColor: Colors.green,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                            child: const Text('Save Result'),
+                          ),
+                        ),
+                      ],
                     ),
-                ],
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (result.status == "PENDING")
-                    IconButton(
-                      icon: const Icon(Icons.upload, color: Colors.blue),
-                      onPressed: () => _uploadResult(index),
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.visibility, color: Colors.green),
-                    onPressed: () => _viewResultDetails(index),
                   ),
                 ],
               ),
@@ -765,61 +604,56 @@ class _LabTestResultsState extends State<LabTestResults> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _addNewTest(),
-        child: const Icon(Icons.add),
-      ),
     );
   }
 
-  void _showFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Filter Results'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('All Results'),
-              leading: Radio<String>(
-                value: 'all',
-                groupValue: 'all',
-                onChanged: (value) {},
-              ),
-            ),
-            ListTile(
-              title: const Text('Pending Only'),
-              leading: Radio<String>(
-                value: 'pending',
-                groupValue: 'all',
-                onChanged: (value) {},
-              ),
-            ),
-            ListTile(
-              title: const Text('Completed Only'),
-              leading: Radio<String>(
-                value: 'completed',
-                groupValue: 'all',
-                onChanged: (value) {},
-              ),
-            ),
-          ],
-        ),
+  // ======================== UI ========================
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Test Results Management'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Apply'),
+          IconButton(
+            icon: Icon(_isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            onPressed: () {
+              setState(() {
+                _isDarkMode = !_isDarkMode;
+                _saveTheme(_isDarkMode);
+              });
+            },
           ),
         ],
       ),
-    );
-  }
-
-  void _addNewTest() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Add new test functionality would be implemented here'),
+      body: ListView.builder(
+        itemCount: _testResults.length,
+        itemBuilder: (context, index) {
+          final r = _testResults[index];
+          return Card(
+            child: ListTile(
+              title: Text(r.testName),
+              subtitle: Text(
+                '${r.patientName} • ${r.status}' +
+                    (r.attachmentPath != null ? ' • File attached' : ''),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (r.status == "PENDING")
+                    IconButton(
+                      icon: const Icon(Icons.upload),
+                      onPressed: () => _uploadResult(index),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.visibility),
+                    onPressed: () {},
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

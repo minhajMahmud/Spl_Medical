@@ -6,3 +6,4 @@ fields:
   bloodGroup: String
   allergies: String
   profilePictureUrl: String?
+  role: String?

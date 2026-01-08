@@ -821,6 +821,326 @@ class Endpoints extends _i1.EndpointDispatch {
                     params['qualification'],
                   ),
         ),
+        'listLabTests': _i1.MethodConnector(
+          name: 'listLabTests',
+          params: {},
+          call:
+              (
+                _i1.Session session,
+                Map<String, dynamic> params,
+              ) async => (endpoints['profile'] as _i3.ProfileEndpoint)
+                  .listLabTests(session),
+        ),
+        'listTestBookings': _i1.MethodConnector(
+          name: 'listTestBookings',
+          params: {},
+          call:
+              (
+                _i1.Session session,
+                Map<String, dynamic> params,
+              ) async => (endpoints['profile'] as _i3.ProfileEndpoint)
+                  .listTestBookings(session),
+        ),
+        'createLabTest': _i1.MethodConnector(
+          name: 'createLabTest',
+          params: {
+            'testName': _i1.ParameterDescription(
+              name: 'testName',
+              type: _i1.getType<String>(),
+              nullable: false,
+            ),
+            'description': _i1.ParameterDescription(
+              name: 'description',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'studentFee': _i1.ParameterDescription(
+              name: 'studentFee',
+              type: _i1.getType<double>(),
+              nullable: false,
+            ),
+            'staffFee': _i1.ParameterDescription(
+              name: 'staffFee',
+              type: _i1.getType<double>(),
+              nullable: false,
+            ),
+            'outsideFee': _i1.ParameterDescription(
+              name: 'outsideFee',
+              type: _i1.getType<double>(),
+              nullable: false,
+            ),
+            'available': _i1.ParameterDescription(
+              name: 'available',
+              type: _i1.getType<bool>(),
+              nullable: false,
+            ),
+          },
+          call:
+              (
+                _i1.Session session,
+                Map<String, dynamic> params,
+              ) async =>
+                  (endpoints['profile'] as _i3.ProfileEndpoint).createLabTest(
+                    session,
+                    testName: params['testName'],
+                    description: params['description'],
+                    studentFee: params['studentFee'],
+                    staffFee: params['staffFee'],
+                    outsideFee: params['outsideFee'],
+                    available: params['available'],
+                  ),
+        ),
+        'updateLabTest': _i1.MethodConnector(
+          name: 'updateLabTest',
+          params: {
+            'testId': _i1.ParameterDescription(
+              name: 'testId',
+              type: _i1.getType<int>(),
+              nullable: false,
+            ),
+            'testName': _i1.ParameterDescription(
+              name: 'testName',
+              type: _i1.getType<String>(),
+              nullable: false,
+            ),
+            'description': _i1.ParameterDescription(
+              name: 'description',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'studentFee': _i1.ParameterDescription(
+              name: 'studentFee',
+              type: _i1.getType<double>(),
+              nullable: false,
+            ),
+            'staffFee': _i1.ParameterDescription(
+              name: 'staffFee',
+              type: _i1.getType<double>(),
+              nullable: false,
+            ),
+            'outsideFee': _i1.ParameterDescription(
+              name: 'outsideFee',
+              type: _i1.getType<double>(),
+              nullable: false,
+            ),
+            'available': _i1.ParameterDescription(
+              name: 'available',
+              type: _i1.getType<bool>(),
+              nullable: false,
+            ),
+          },
+          call:
+              (
+                _i1.Session session,
+                Map<String, dynamic> params,
+              ) async =>
+                  (endpoints['profile'] as _i3.ProfileEndpoint).updateLabTest(
+                    session,
+                    testId: params['testId'],
+                    testName: params['testName'],
+                    description: params['description'],
+                    studentFee: params['studentFee'],
+                    staffFee: params['staffFee'],
+                    outsideFee: params['outsideFee'],
+                    available: params['available'],
+                  ),
+        ),
+        'searchPatient': _i1.MethodConnector(
+          name: 'searchPatient',
+          params: {
+            'searchTerm': _i1.ParameterDescription(
+              name: 'searchTerm',
+              type: _i1.getType<String>(),
+              nullable: false,
+            ),
+          },
+          call:
+              (
+                _i1.Session session,
+                Map<String, dynamic> params,
+              ) async =>
+                  (endpoints['profile'] as _i3.ProfileEndpoint).searchPatient(
+                    session,
+                    searchTerm: params['searchTerm'],
+                  ),
+        ),
+        'createTestBooking': _i1.MethodConnector(
+          name: 'createTestBooking',
+          params: {
+            'bookingId': _i1.ParameterDescription(
+              name: 'bookingId',
+              type: _i1.getType<String>(),
+              nullable: false,
+            ),
+            'patientId': _i1.ParameterDescription(
+              name: 'patientId',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'testIds': _i1.ParameterDescription(
+              name: 'testIds',
+              type: _i1.getType<List<int>>(),
+              nullable: false,
+            ),
+            'bookingDate': _i1.ParameterDescription(
+              name: 'bookingDate',
+              type: _i1.getType<DateTime>(),
+              nullable: false,
+            ),
+            'isExternalPatient': _i1.ParameterDescription(
+              name: 'isExternalPatient',
+              type: _i1.getType<bool>(),
+              nullable: false,
+            ),
+            'patientType': _i1.ParameterDescription(
+              name: 'patientType',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'externalPatientName': _i1.ParameterDescription(
+              name: 'externalPatientName',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'externalPatientEmail': _i1.ParameterDescription(
+              name: 'externalPatientEmail',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'externalPatientPhone': _i1.ParameterDescription(
+              name: 'externalPatientPhone',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+          },
+          call:
+              (
+                _i1.Session session,
+                Map<String, dynamic> params,
+              ) async => (endpoints['profile'] as _i3.ProfileEndpoint)
+                  .createTestBooking(
+                    session,
+                    bookingId: params['bookingId'],
+                    patientId: params['patientId'],
+                    testIds: params['testIds'],
+                    bookingDate: params['bookingDate'],
+                    isExternalPatient: params['isExternalPatient'],
+                    patientType: params['patientType'],
+                    externalPatientName: params['externalPatientName'],
+                    externalPatientEmail: params['externalPatientEmail'],
+                    externalPatientPhone: params['externalPatientPhone'],
+                  ),
+        ),
+        'uploadTestResult': _i1.MethodConnector(
+          name: 'uploadTestResult',
+          params: {
+            'bookingId': _i1.ParameterDescription(
+              name: 'bookingId',
+              type: _i1.getType<String>(),
+              nullable: false,
+            ),
+            'testId': _i1.ParameterDescription(
+              name: 'testId',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'staffId': _i1.ParameterDescription(
+              name: 'staffId',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'status': _i1.ParameterDescription(
+              name: 'status',
+              type: _i1.getType<String>(),
+              nullable: false,
+            ),
+            'resultDate': _i1.ParameterDescription(
+              name: 'resultDate',
+              type: _i1.getType<DateTime?>(),
+              nullable: true,
+            ),
+            'attachmentPath': _i1.ParameterDescription(
+              name: 'attachmentPath',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'sendToPatient': _i1.ParameterDescription(
+              name: 'sendToPatient',
+              type: _i1.getType<bool>(),
+              nullable: false,
+            ),
+            'sendToDoctor': _i1.ParameterDescription(
+              name: 'sendToDoctor',
+              type: _i1.getType<bool>(),
+              nullable: false,
+            ),
+            'patientEmailOverride': _i1.ParameterDescription(
+              name: 'patientEmailOverride',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'doctorEmailOverride': _i1.ParameterDescription(
+              name: 'doctorEmailOverride',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'attachmentFileName': _i1.ParameterDescription(
+              name: 'attachmentFileName',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'attachmentContentBase64': _i1.ParameterDescription(
+              name: 'attachmentContentBase64',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+            'attachmentContentType': _i1.ParameterDescription(
+              name: 'attachmentContentType',
+              type: _i1.getType<String?>(),
+              nullable: true,
+            ),
+          },
+          call:
+              (
+                _i1.Session session,
+                Map<String, dynamic> params,
+              ) async => (endpoints['profile'] as _i3.ProfileEndpoint)
+                  .uploadTestResult(
+                    session,
+                    bookingId: params['bookingId'],
+                    testId: params['testId'],
+                    staffId: params['staffId'],
+                    status: params['status'],
+                    resultDate: params['resultDate'],
+                    attachmentPath: params['attachmentPath'],
+                    sendToPatient: params['sendToPatient'],
+                    sendToDoctor: params['sendToDoctor'],
+                    patientEmailOverride: params['patientEmailOverride'],
+                    doctorEmailOverride: params['doctorEmailOverride'],
+                    attachmentFileName: params['attachmentFileName'],
+                    attachmentContentBase64: params['attachmentContentBase64'],
+                    attachmentContentType: params['attachmentContentType'],
+                  ),
+        ),
+        'downloadTestResult': _i1.MethodConnector(
+          name: 'downloadTestResult',
+          params: {
+            'bookingId': _i1.ParameterDescription(
+              name: 'bookingId',
+              type: _i1.getType<String>(),
+              nullable: false,
+            ),
+          },
+          call:
+              (
+                _i1.Session session,
+                Map<String, dynamic> params,
+              ) async => (endpoints['profile'] as _i3.ProfileEndpoint)
+                  .downloadTestResult(
+                    session,
+                    params['bookingId'],
+                  ),
+        ),
       },
     );
     connectors['patient'] = _i1.EndpointConnector(

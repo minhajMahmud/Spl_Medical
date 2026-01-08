@@ -1,8 +1,14 @@
-// lab_test_panel.dart
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'lab_booking_entry.dart';
+import 'package:backend_client/backend_client.dart' as backend;
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:universal_html/html.dart' as html;
+import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
+import 'lab_test_booking.dart';
 
 class LabTestPanel extends StatefulWidget {
   const LabTestPanel({super.key});
@@ -13,82 +19,15 @@ class LabTestPanel extends StatefulWidget {
 
 class _LabTestPanelState extends State<LabTestPanel> {
   bool _isDarkMode = true;
-  final List<Map<String, dynamic>> _bookedTests = [
-    {
-      "bookingId": "BK004",
-      "patient": "Kamrul Islam",
-      "patientId": "emp123",
-      "patientType": "employee",
-      "test": "Lipid Profile",
-      "testId": "10",
-      "status": "Sample Pending",
-      "bookingDate": "2024-10-08",
-      "amount": 450.0,
-    },
-    {
-      "bookingId": "BK003",
-      "patient": "Ayesha Begum",
-      "patientId": "WALKIN:01712345678",
-      "patientType": "out_patient",
-      "test": "Urine R/M/E",
-      "testId": "04",
-      "status": "In Progress",
-      "bookingDate": "2024-10-09",
-      "amount": 150.0,
-    },
-    {
-      "bookingId": "BK002",
-      "patient": "Maya Rahman",
-      "patientId": "stu123",
-      "patientType": "student",
-      "test": "Blood Grouping",
-      "testId": "08",
-      "status": "In Progress",
-      "bookingDate": "2024-10-09",
-      "amount": 60.0,
-    },
-    {
-      "bookingId": "BK001",
-      "patient": "Rafi Ahmed",
-      "patientId": "STU2024001",
-      "patientType": "student",
-      "test": "CBC",
-      "testId": "02",
-      "status": "Completed",
-      "bookingDate": "2024-10-08",
-      "amount": 200.0,
-    },
-    {
-      "bookingId": "BK005",
-      "patient": "Barsha Islam",
-      "patientId": "STU2024002",
-      "patientType": "student",
-      "test": "Blood Glucose",
-      "testId": "08",
-      "status": "Sample Pending",
-      "bookingDate": "2024-10-10",
-      "amount": 60.0,
-    },
-    {
-      "bookingId": "BK006",
-      "patient": "Habiba Sultana",
-      "patientId": "EMP456",
-      "patientType": "employee",
-      "test": "CBC",
-      "testId": "02",
-      "status": "Completed",
-      "bookingDate": "2024-10-09",
-      "amount": 230.0,
-    },
-  ];
-
-  String _searchQuery = '';
-  String _selectedStatus = 'All';
+  String _selectedFilter = 'All'; // All, Pending, Completed
+  List<Map<String, dynamic>> _bookings = [];
+  List<Map<String, dynamic>> _filteredBookings = [];
 
   @override
   void initState() {
     super.initState();
     _loadThemePreference();
+    _loadBookings();
   }
 
   Future<void> _loadThemePreference() async {
@@ -103,820 +42,783 @@ class _LabTestPanelState extends State<LabTestPanel> {
     await prefs.setBool('isDarkMode', isDark);
   }
 
-  void _updateBookingStatus(String bookingId, String newStatus) {
-    setState(() {
-      final index = _bookedTests.indexWhere((b) => b["bookingId"] == bookingId);
-      if (index != -1) {
-        _bookedTests[index]["status"] = newStatus;
+  Future<void> _loadBookings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // 1) Load legacy/local bookings from SharedPreferences
+      final bookingsList = prefs.getStringList('lab_test_bookings') ?? [];
+
+      final List<Map<String, dynamic>> localBookings = [];
+      for (String bookingStr in bookingsList) {
+        try {
+          final booking = jsonDecode(bookingStr) as Map<String, dynamic>;
+          localBookings.add(booking);
+        } catch (e) {
+          // ignore: avoid_print
+          print('Error parsing booking: $e');
+        }
+      }
+
+      // 2) Load bookings from backend database (test_bookings table)
+      final List<Map<String, dynamic>> backendBookings = [];
+      try {
+        final rows = await backend.client.profile.listTestBookings();
+        print('DEBUG: Loaded ${rows.length} bookings from backend');
+
+        for (final row in rows) {
+          final rawBookingId = row.bookingId;
+          if (rawBookingId.isEmpty) continue;
+
+          // Normalize booking code to display-friendly format (e.g., BK000123)
+          String bookingCode;
+          final numericId = int.tryParse(rawBookingId);
+          if (numericId != null) {
+            bookingCode = 'BK${numericId.toString().padLeft(6, '0')}';
+          } else {
+            bookingCode = rawBookingId; // Fallback if already formatted
+          }
+
+          final bool isExternal = row.isExternalPatient;
+          final String? dbPatientId = row.patientId;
+          final String patientName =
+              row.patientName ??
+              (isExternal ? 'Walk-in Patient' : 'Unknown Patient');
+          final String patientEmail = row.patientEmail ?? '';
+          final String patientPhone = row.patientPhone ?? '';
+          final String testId = row.testId.toString();
+          final String testName = row.testName;
+
+          final String status = row.status.isEmpty ? 'PENDING' : row.status;
+
+          final String bookingDateStr = row.bookingDate;
+
+          final double amount = row.outsideFee;
+
+          final String patientType = row.patientType.isEmpty
+              ? 'outpatient'
+              : row.patientType;
+
+          backendBookings.add({
+            'bookingId': bookingCode,
+            'patient': patientName,
+            'patientId': isExternal
+                ? 'WALKIN:$bookingCode'
+                : (dbPatientId ?? ''),
+            'dbPatientId': dbPatientId,
+            'isExternalPatient': isExternal,
+            'patientType': patientType,
+            'tests': [
+              {'testId': testId, 'test': testName, 'price': amount},
+            ],
+            'status': status,
+            'bookingDate': bookingDateStr,
+            'amount': amount,
+            'patientEmail': patientEmail,
+            'patientPhone': patientPhone,
+          });
+        }
+
+        print('DEBUG: Processed ${backendBookings.length} backend bookings');
+      } catch (e, st) {
+        // ignore: avoid_print
+        print('Error loading bookings from backend: $e\n$st');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading bookings from database: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+
+      // 3) Merge local and backend bookings, preferring backend data
+      final Map<String, Map<String, dynamic>> merged = {};
+
+      String getUniqueKey(Map<String, dynamic> b) {
+        final id = b['bookingId']?.toString() ?? '';
+        final tests = b['tests'] as List?;
+        if (tests != null && tests.isNotEmpty) {
+          // Use first test ID as differentiator if available
+          // This handles cases where one booking ID has multiple test rows (separate cards)
+          final firstTest = tests.first;
+          // Local/Backend test objects might differ but usually map to Map<String, dynamic>
+          if (firstTest is Map) {
+            final testId = firstTest['testId']?.toString() ?? '';
+            if (testId.isNotEmpty) {
+              return '${id}_$testId';
+            }
+          }
+        }
+        return id;
+      }
+
+      for (final b in localBookings) {
+        final key = getUniqueKey(b);
+        if (key.isNotEmpty) {
+          merged[key] = b;
+        }
+      }
+
+      for (final b in backendBookings) {
+        final key = getUniqueKey(b);
+        if (key.isNotEmpty) {
+          merged[key] = b;
+        }
+      }
+
+      final mergedList = merged.values.toList()
+        ..sort((a, b) {
+          final ad = a['bookingDate']?.toString() ?? '';
+          final bd = b['bookingDate']?.toString() ?? '';
+          return bd.compareTo(ad); // newest first
+        });
+
+      print('DEBUG: Total merged bookings: ${mergedList.length}');
+
+      setState(() {
+        _bookings = mergedList;
+        _applyFilter();
+      });
+    } catch (e) {
+      print('Error loading bookings: $e');
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Booking $bookingId updated to "$newStatus"'),
-            backgroundColor: newStatus == "Completed"
-                ? Colors.green
-                : newStatus == "In Progress"
-                ? Colors.blue
-                : newStatus == "Sample Pending"
-                ? Colors.orange
-                : Colors.grey,
+            content: Text('Error loading bookings: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
+      }
+    }
+  }
+
+  void _applyFilter() {
+    setState(() {
+      if (_selectedFilter == 'All') {
+        _filteredBookings = List.from(_bookings);
+      } else if (_selectedFilter == 'Pending') {
+        _filteredBookings = _bookings
+            .where(
+              (booking) =>
+                  (booking['status'] as String?)?.toLowerCase().contains(
+                    'pending',
+                  ) ??
+                  false,
+            )
+            .toList();
+      } else if (_selectedFilter == 'Completed') {
+        _filteredBookings = _bookings
+            .where(
+              (booking) =>
+                  (booking['status'] as String?)?.toLowerCase().contains(
+                    'completed',
+                  ) ??
+                  false,
+            )
+            .toList();
       }
     });
   }
 
+  void _createNewBooking() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PatientBookingEntry()),
+    );
+
+    if (result == true) {
+      _loadBookings();
+    }
+  }
+
+  void _uploadResult(Map<String, dynamic> booking) async {
+    // Open backend-integrated result upload screen for this booking.
+    final prefs = await SharedPreferences.getInstance();
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ResultUploadScreen(
+          booking: booking,
+          onComplete: (bookingId, newStatus) {
+            // Update in-memory booking status
+            final idx = _bookings.indexWhere(
+              (b) => b['bookingId']?.toString() == bookingId,
+            );
+            if (idx != -1) {
+              _bookings[idx]['status'] = newStatus;
+            }
+
+            // Persist updated bookings back to SharedPreferences so that
+            // filters (All / Pending / Completed) reflect the new status.
+            final updatedList = _bookings
+                .map((b) => jsonEncode(b))
+                .toList()
+                .cast<String>();
+            prefs.setStringList('lab_test_bookings', updatedList);
+          },
+        ),
+      ),
+    );
+
+    // After returning from upload screen, reload bookings to ensure the
+    // latest state (including any external changes) is shown.
+    if (mounted) {
+      _loadBookings();
+    }
+  }
+
+  Future<void> _downloadResult(String bookingId) async {
+    try {
+      if (bookingId.isEmpty) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Downloading result for $bookingId...'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+
+      final resultJson = await backend.client.profile.downloadTestResult(
+        bookingId,
+      );
+      if (resultJson.isEmpty) {
+        throw Exception("Result file not found");
+      }
+
+      final Map<String, dynamic> result = jsonDecode(resultJson);
+      final filename = result['filename'] as String? ?? 'result_$bookingId.pdf';
+      final base64Data = result['data'] as String?;
+
+      if (base64Data == null || base64Data.isEmpty) {
+        throw Exception("Empty file content");
+      }
+
+      final Uint8List bytes = base64Decode(base64Data);
+
+      if (kIsWeb) {
+        final blob = html.Blob([bytes]);
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        html.AnchorElement(href: url)
+          ..setAttribute("download", filename)
+          ..click();
+        html.Url.revokeObjectUrl(url);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Downloaded $filename'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+        return;
+      }
+
+      Directory? baseDir;
+      try {
+        if (Platform.isAndroid || Platform.isIOS) {
+          baseDir = await getApplicationDocumentsDirectory();
+        } else {
+          // On Windows/Desktop
+          try {
+            baseDir = await getDownloadsDirectory();
+          } catch (_) {}
+
+          // Fallback for Windows if plugin fails (MissingPluginException)
+          if (baseDir == null && Platform.isWindows) {
+            final userProfile = Platform.environment['USERPROFILE'];
+            if (userProfile != null) {
+              final downloads = Directory('$userProfile\\Downloads');
+              if (downloads.existsSync()) {
+                baseDir = downloads;
+              } else {
+                final documents = Directory('$userProfile\\Documents');
+                if (documents.existsSync()) {
+                  baseDir = documents;
+                }
+              }
+            }
+          }
+
+          // Fallback to application documents if still null
+          baseDir ??= await getApplicationDocumentsDirectory();
+        }
+      } catch (_) {
+        // Absolute fallback for local dev
+        if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+          baseDir = Directory.current;
+        } else {
+          rethrow;
+        }
+      }
+
+      final safeName = filename.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final path = '${baseDir.path}${Platform.pathSeparator}$safeName';
+      final file = File(path);
+
+      await file.writeAsBytes(bytes, flush: true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved to $safeName'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Open',
+              textColor: Colors.white,
+              onPressed: () => OpenFile.open(path),
+            ),
+          ),
+        );
+
+        // Auto open
+        await OpenFile.open(path);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Theme colors
     final bgColor = _isDarkMode ? const Color(0xFF1A1F2E) : Colors.grey[50]!;
     final cardColor = _isDarkMode ? const Color(0xFF252B3D) : Colors.white;
     final textColor = _isDarkMode ? Colors.white : Colors.black87;
     final subtextColor = _isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
 
-    // Inline filtered bookings
-    List<Map<String, dynamic>> filteredBookings = _bookedTests;
-    if (_selectedStatus != 'All') {
-      filteredBookings = filteredBookings
-          .where((b) => b["status"] == _selectedStatus)
-          .toList();
-    }
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
-      filteredBookings = filteredBookings.where((b) {
-        return b["patient"].toLowerCase().contains(q) ||
-            b["patientId"].toLowerCase().contains(q) ||
-            b["test"].toLowerCase().contains(q) ||
-            b["bookingId"].toLowerCase().contains(q);
-      }).toList();
-    }
-
-    List<Map<String, dynamic>> pendingBookings = filteredBookings
-        .where((b) => b["status"] != "Completed")
-        .toList();
-
-    Color getStatusColor(String status) {
-      switch (status) {
-        case "Completed":
-          return Colors.green;
-        case "In Progress":
-          return Colors.blue;
-        case "Sample Pending":
-          return Colors.orange;
-        default:
-          return Colors.grey;
-      }
-    }
-
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: bgColor,
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(55),
-          child: Container(
-            color: cardColor,
-            child: Row(
-              children: [
-                Expanded(
-                  child: TabBar(
-                    tabs: [
-                      Tab(icon: Icon(Icons.list_alt), text: 'Bookings'),
-                      Tab(
-                        icon: Icon(Icons.science_outlined),
-                        text: 'Result/Sample Action',
-                      ),
-                    ],
-                    labelColor: const Color(0xFF7C3AED),
-                    unselectedLabelColor: textColor.withOpacity(0.6),
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    _isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                    color: textColor,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _isDarkMode = !_isDarkMode;
-                      _saveThemePreference(_isDarkMode);
-                    });
-                  },
+    return Scaffold(
+      backgroundColor: bgColor,
+      appBar: AppBar(
+        title: Text(
+          'Lab Test Bookings',
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: cardColor,
+        iconTheme: IconThemeData(color: textColor),
+        centerTitle: true,
+        elevation: 2,
+        actions: [
+          IconButton(
+            icon: Icon(
+              _isDarkMode ? Icons.light_mode : Icons.dark_mode,
+              color: textColor,
+            ),
+            onPressed: () {
+              setState(() {
+                _isDarkMode = !_isDarkMode;
+                _saveThemePreference(_isDarkMode);
+              });
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Filter Tabs
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(
+              color: cardColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
+            child: Row(
+              children: [
+                _buildFilterChip('All', textColor, subtextColor),
+                const SizedBox(width: 12),
+                _buildFilterChip('Pending', textColor, subtextColor),
+                const SizedBox(width: 12),
+                _buildFilterChip('Completed', textColor, subtextColor),
+              ],
+            ),
           ),
-        ),
-        body: Column(
-          children: [
-            // Inline Search and Filter Bar
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: bgColor,
-              child: Column(
-                children: [
-                  TextField(
-                    style: TextStyle(color: textColor),
-                    decoration: InputDecoration(
-                      hintText:
-                          'Search by patient name, ID, test, or booking ID...',
-                      hintStyle: TextStyle(color: subtextColor),
-                      prefixIcon: Icon(Icons.search, color: subtextColor),
-                      filled: true,
-                      fillColor: cardColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children:
-                          [
-                            'All',
-                            'Sample Pending',
-                            'In Progress',
-                            'Completed',
-                          ].map((status) {
-                            bool isSelected = _selectedStatus == status;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text(status),
-                                selected: isSelected,
-                                onSelected: (selected) {
-                                  setState(() {
-                                    _selectedStatus = selected ? status : 'All';
-                                  });
-                                },
-                                backgroundColor: cardColor,
-                                selectedColor: getStatusColor(
-                                  status,
-                                ).withOpacity(0.2),
-                                checkmarkColor: getStatusColor(status),
-                                labelStyle: TextStyle(
-                                  color: isSelected
-                                      ? getStatusColor(status)
-                                      : subtextColor,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Tab View
-            Expanded(
-              child: TabBarView(
-                children: [
-                  // Bookings Tab
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
+
+          // Bookings List
+          Expanded(
+            child: _filteredBookings.isEmpty
+                ? Center(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // New Booking
-                        Card(
-                          elevation: 2,
-                          color: cardColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Start New Test Booking",
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: textColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  "Search for a registered patient ID or select a Walk-in type.",
-                                  style: TextStyle(color: subtextColor),
-                                ),
-                                const SizedBox(height: 16),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    onPressed: () async {
-                                      await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const PatientBookingEntry(),
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(Icons.add_box),
-                                    label: const Text('Select Patient/Type'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue.shade700,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        // Results Count
-                        Row(
-                          children: [
-                            Text(
-                              "Bookings",
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${filteredBookings.length} found',
-                                style: TextStyle(
-                                  color: Colors.blue.shade800,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        if (filteredBookings.isEmpty)
-                          Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.search_off,
-                                  size: 64,
-                                  color: subtextColor,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No bookings found',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: textColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Try adjusting your search or filter',
-                                  style: TextStyle(color: subtextColor),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          ...filteredBookings.map((booking) {
-                            return Card(
-                              elevation: 1,
-                              color: cardColor,
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.all(12),
-                                leading: CircleAvatar(
-                                  backgroundColor: getStatusColor(
-                                    booking["status"],
-                                  ),
-                                  child: Text(
-                                    booking["bookingId"].toString().substring(
-                                      2,
-                                    ),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                title: Text(
-                                  '${booking["test"]}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: textColor,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  '${booking["patient"]} (${booking["patientId"]})\nDate: ${booking["bookingDate"]} | Fee: ৳${booking["amount"].toStringAsFixed(0)}',
-                                  style: TextStyle(color: subtextColor),
-                                ),
-                                trailing: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: getStatusColor(
-                                      booking["status"],
-                                    ).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    booking["status"],
-                                    style: TextStyle(
-                                      color: getStatusColor(booking["status"]),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                                onTap: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Viewing booking ${booking["bookingId"]}',
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          }),
-                      ],
-                    ),
-                  ),
-                  // Result / Sample Action Tab
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Results Count
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                "Action Required: Sample & Result Entry",
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: textColor,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade100,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${pendingBookings.length} pending',
-                                style: TextStyle(
-                                  color: Colors.orange.shade800,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Divider(),
-                        if (pendingBookings.isEmpty)
-                          Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.task_alt,
-                                  size: 64,
-                                  color: Colors.green.shade400,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  "🎉 All booked tests have been processed and completed.",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: textColor,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'No pending tests match your search criteria',
-                                  style: TextStyle(color: subtextColor),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          ...pendingBookings.map((booking) {
-                            final status = booking["status"];
-                            final bookingId = booking["bookingId"];
-                            Widget actionButton;
-                            if (status == "Sample Pending") {
-                              actionButton = ElevatedButton.icon(
-                                onPressed: () => _updateBookingStatus(
-                                  bookingId,
-                                  "In Progress",
-                                ),
-                                icon: const Icon(Icons.colorize),
-                                label: const Text('Collect Sample'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange.shade700,
-                                  foregroundColor: Colors.white,
-                                ),
-                              );
-                            } else if (status == "In Progress") {
-                              actionButton = ElevatedButton.icon(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ResultUploadScreen(
-                                        booking: booking,
-                                        onComplete: _updateBookingStatus,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.upload_file),
-                                label: const Text('Upload Result (File)'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green.shade700,
-                                  foregroundColor: Colors.white,
-                                ),
-                              );
-                            } else {
-                              actionButton = const SizedBox.shrink();
-                            }
-
-                            return Card(
-                              elevation: 2,
-                              color: cardColor,
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: Icon(
-                                        Icons.science,
-                                        color: getStatusColor(status),
-                                      ),
-                                      title: Text(
-                                        '${booking["test"]} (${booking["bookingId"]})',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: textColor,
-                                        ),
-                                      ),
-                                      subtitle: Text(
-                                        '${booking["patient"]} (${booking["patientId"]})\nStatus: $status',
-                                        style: TextStyle(color: subtextColor),
-                                      ),
-                                      trailing: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: getStatusColor(
-                                            status,
-                                          ).withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          status,
-                                          style: TextStyle(
-                                            color: getStatusColor(status),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const Divider(height: 10),
-                                    actionButton,
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ResultUploadScreen inline version
-class ResultUploadScreen extends StatefulWidget {
-  final Map<String, dynamic> booking;
-  final Function(String, String) onComplete;
-
-  const ResultUploadScreen({
-    super.key,
-    required this.booking,
-    required this.onComplete,
-  });
-
-  @override
-  State<ResultUploadScreen> createState() => _ResultUploadScreenState();
-}
-
-class _ResultUploadScreenState extends State<ResultUploadScreen> {
-  PlatformFile? _selectedFile;
-  final TextEditingController _notesController = TextEditingController();
-  bool _isUploading = false;
-
-  void _selectFile() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
-        allowMultiple: false,
-      );
-      if (result != null && result.files.isNotEmpty) {
-        setState(() {
-          _selectedFile = result.files.first;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'File selected: ${_selectedFile!.name} (${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB)',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File selection canceled')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
-    }
-  }
-
-  void _submitResult() async {
-    if (_selectedFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a result file to upload.')),
-      );
-      return;
-    }
-    setState(() {
-      _isUploading = true;
-    });
-    await Future.delayed(const Duration(seconds: 2));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Result file "${_selectedFile!.name}" uploaded successfully!',
-        ),
-        backgroundColor: Colors.green,
-      ),
-    );
-    widget.onComplete(widget.booking["bookingId"], "Completed");
-    if (mounted) {
-      Navigator.pop(context);
-    }
-  }
-
-  IconData _getFileIcon(String? ext) {
-    switch (ext?.toLowerCase()) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-        return Icons.image;
-      case 'doc':
-      case 'docx':
-        return Icons.description;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / 1048576).toStringAsFixed(1)} MB';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bookingId = widget.booking["bookingId"];
-    final patientName = widget.booking["patient"];
-    final testName = widget.booking["test"];
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Upload Result: $bookingId'),
-        backgroundColor: Colors.green.shade700,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListTile(
-                leading: const Icon(Icons.person, color: Colors.blue),
-                title: Text(
-                  patientName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text('Test: $testName'),
-                trailing: Text(bookingId),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              "Upload Result File (PDF/Image/Document)",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300, width: 2),
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.grey.shade50,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_selectedFile == null)
-                    const Column(
-                      children: [
-                        Icon(Icons.cloud_upload, size: 50, color: Colors.grey),
-                        SizedBox(height: 8),
-                        Text(
-                          'No file selected',
-                          style: TextStyle(color: Colors.grey, fontSize: 16),
-                        ),
-                      ],
-                    )
-                  else
-                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          _getFileIcon(_selectedFile!.extension),
-                          size: 40,
-                          color: Colors.blue,
+                          Icons.inbox_outlined,
+                          size: 64,
+                          color: subtextColor,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedFile!.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 14,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _formatFileSize(_selectedFile!.size),
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Type: ${_selectedFile!.extension?.toUpperCase() ?? 'Unknown'}',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No ${_selectedFilter.toLowerCase()} bookings',
+                          style: TextStyle(fontSize: 16, color: subtextColor),
                         ),
-                        Icon(Icons.check_circle, color: Colors.green.shade600),
                       ],
                     ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isUploading ? null : _selectFile,
-                      icon: const Icon(Icons.attach_file),
-                      label: Text(
-                        _selectedFile == null
-                            ? 'Select Result File'
-                            : 'Change File',
-                      ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadBookings,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _filteredBookings.length,
+                      itemBuilder: (context, index) {
+                        return _buildBookingCard(
+                          _filteredBookings[index],
+                          cardColor,
+                          textColor,
+                          subtextColor,
+                        );
+                      },
+                    ),
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createNewBooking,
+        backgroundColor: const Color(0xFF7C3AED),
+        icon: const Icon(Icons.add),
+        label: const Text('New Booking'),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, Color textColor, Color subtextColor) {
+    final isSelected = _selectedFilter == label;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedFilter = label;
+            _applyFilter();
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF7C3AED) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF7C3AED)
+                  : subtextColor.withOpacity(0.3),
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : textColor,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBookingCard(
+    Map<String, dynamic> booking,
+    Color cardColor,
+    Color textColor,
+    Color subtextColor,
+  ) {
+    final status = booking['status'] as String? ?? 'Unknown';
+    final isPending = status.toLowerCase().contains('pending');
+    final isCompleted = status.toLowerCase().contains('completed');
+
+    Color statusColor;
+    IconData statusIcon;
+    if (isPending) {
+      statusColor = Colors.orange;
+      statusIcon = Icons.pending_actions;
+    } else if (isCompleted) {
+      statusColor = Colors.green;
+      statusIcon = Icons.check_circle;
+    } else {
+      statusColor = Colors.grey;
+      statusIcon = Icons.info;
+    }
+
+    return Card(
+      color: cardColor,
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _showBookingDetails(booking, textColor, subtextColor),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          booking['bookingId'] ?? 'N/A',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF7C3AED),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          booking['patient'] ?? 'Unknown Patient',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: textColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusIcon, size: 16, color: statusColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          status,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              "Lab Tester Notes (Optional)",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _notesController,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: "Enter any special observations or notes...",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignLabelWithHint: true,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 14, color: subtextColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    booking['bookingDate'] ?? 'N/A',
+                    style: TextStyle(fontSize: 12, color: subtextColor),
+                  ),
+                  const SizedBox(width: 16),
+                  Icon(Icons.science, size: 14, color: subtextColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${(booking['tests'] as List?)?.length ?? 0} test(s)',
+                      style: TextStyle(fontSize: 12, color: subtextColor),
+                    ),
+                  ),
+                  Text(
+                    '৳${booking['amount']?.toString() ?? '0'}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: _isUploading
-                  ? ElevatedButton(
-                      onPressed: null,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text('Uploading...'),
-                        ],
-                      ),
-                    )
-                  : ElevatedButton.icon(
-                      onPressed: _submitResult,
-                      icon: const Icon(Icons.done_all),
-                      label: const Text('Submit Result and Complete Booking'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade700,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+              if (isPending) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _uploadResult(booking),
+                    icon: const Icon(Icons.upload_file, size: 18),
+                    label: const Text('Upload Result'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7C3AED),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-            ),
-          ],
+                  ),
+                ),
+              ] else if (isCompleted) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final bookingId = booking['bookingId']?.toString() ?? '';
+                      _downloadResult(bookingId);
+                    },
+                    icon: const Icon(Icons.download, size: 18),
+                    label: const Text('Download Result'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      side: const BorderSide(color: Colors.green),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  void _showBookingDetails(
+    Map<String, dynamic> booking,
+    Color textColor,
+    Color subtextColor,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Booking Details',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDetailRow(
+                      'Booking ID',
+                      booking['bookingId'] ?? 'N/A',
+                    ),
+                    _buildDetailRow('Patient', booking['patient'] ?? 'Unknown'),
+                    _buildDetailRow(
+                      'Patient ID',
+                      booking['patientId'] ?? 'N/A',
+                    ),
+                    _buildDetailRow('Phone', booking['patientPhone'] ?? 'N/A'),
+                    _buildDetailRow('Email', booking['patientEmail'] ?? 'N/A'),
+                    _buildDetailRow('Date', booking['bookingDate'] ?? 'N/A'),
+                    _buildDetailRow('Status', booking['status'] ?? 'Unknown'),
+                    const Divider(height: 24),
+                    const Text(
+                      'Tests',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...(booking['tests'] as List?)?.map((test) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Text('• ${test['test'] ?? 'Unknown Test'}'),
+                          );
+                        }).toList() ??
+                        [const Text('No tests')],
+                    const Divider(height: 24),
+                    _buildDetailRow(
+                      'Total Amount',
+                      '৳${booking['amount']?.toString() ?? '0'}',
+                      isBold: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

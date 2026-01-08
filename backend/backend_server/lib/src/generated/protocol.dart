@@ -13,13 +13,19 @@
 import 'package:serverpod/serverpod.dart' as _i1;
 import 'package:serverpod/protocol.dart' as _i2;
 import 'greeting.dart' as _i3;
-import 'login_response.dart' as _i4;
-import 'patient_reponse.dart' as _i5;
-import 'user_list_item.dart' as _i6;
-import 'package:backend_server/src/generated/user_list_item.dart' as _i7;
+import 'lab_test_info.dart' as _i4;
+import 'login_response.dart' as _i5;
+import 'patient_reponse.dart' as _i6;
+import 'test_booking_dto.dart' as _i7;
+import 'user_list_item.dart' as _i8;
+import 'package:backend_server/src/generated/user_list_item.dart' as _i9;
+import 'package:backend_server/src/generated/lab_test_info.dart' as _i10;
+import 'package:backend_server/src/generated/test_booking_dto.dart' as _i11;
 export 'greeting.dart';
+export 'lab_test_info.dart';
 export 'login_response.dart';
 export 'patient_reponse.dart';
+export 'test_booking_dto.dart';
 export 'user_list_item.dart';
 
 class Protocol extends _i1.SerializationManagerServer {
@@ -63,30 +69,42 @@ class Protocol extends _i1.SerializationManagerServer {
     if (t == _i3.Greeting) {
       return _i3.Greeting.fromJson(data) as T;
     }
-    if (t == _i4.LoginResponse) {
-      return _i4.LoginResponse.fromJson(data) as T;
+    if (t == _i4.LabTestInfo) {
+      return _i4.LabTestInfo.fromJson(data) as T;
     }
-    if (t == _i5.PatientProfileDto) {
-      return _i5.PatientProfileDto.fromJson(data) as T;
+    if (t == _i5.LoginResponse) {
+      return _i5.LoginResponse.fromJson(data) as T;
     }
-    if (t == _i6.UserListItem) {
-      return _i6.UserListItem.fromJson(data) as T;
+    if (t == _i6.PatientProfileDto) {
+      return _i6.PatientProfileDto.fromJson(data) as T;
+    }
+    if (t == _i7.TestBookingDto) {
+      return _i7.TestBookingDto.fromJson(data) as T;
+    }
+    if (t == _i8.UserListItem) {
+      return _i8.UserListItem.fromJson(data) as T;
     }
     if (t == _i1.getType<_i3.Greeting?>()) {
       return (data != null ? _i3.Greeting.fromJson(data) : null) as T;
     }
-    if (t == _i1.getType<_i4.LoginResponse?>()) {
-      return (data != null ? _i4.LoginResponse.fromJson(data) : null) as T;
+    if (t == _i1.getType<_i4.LabTestInfo?>()) {
+      return (data != null ? _i4.LabTestInfo.fromJson(data) : null) as T;
     }
-    if (t == _i1.getType<_i5.PatientProfileDto?>()) {
-      return (data != null ? _i5.PatientProfileDto.fromJson(data) : null) as T;
+    if (t == _i1.getType<_i5.LoginResponse?>()) {
+      return (data != null ? _i5.LoginResponse.fromJson(data) : null) as T;
     }
-    if (t == _i1.getType<_i6.UserListItem?>()) {
-      return (data != null ? _i6.UserListItem.fromJson(data) : null) as T;
+    if (t == _i1.getType<_i6.PatientProfileDto?>()) {
+      return (data != null ? _i6.PatientProfileDto.fromJson(data) : null) as T;
     }
-    if (t == List<_i7.UserListItem>) {
+    if (t == _i1.getType<_i7.TestBookingDto?>()) {
+      return (data != null ? _i7.TestBookingDto.fromJson(data) : null) as T;
+    }
+    if (t == _i1.getType<_i8.UserListItem?>()) {
+      return (data != null ? _i8.UserListItem.fromJson(data) : null) as T;
+    }
+    if (t == List<_i9.UserListItem>) {
       return (data as List)
-              .map((e) => deserialize<_i7.UserListItem>(e))
+              .map((e) => deserialize<_i9.UserListItem>(e))
               .toList()
           as T;
     }
@@ -111,6 +129,21 @@ class Protocol extends _i1.SerializationManagerServer {
               : null)
           as T;
     }
+    if (t == List<_i10.LabTestInfo>) {
+      return (data as List)
+              .map((e) => deserialize<_i10.LabTestInfo>(e))
+              .toList()
+          as T;
+    }
+    if (t == List<_i11.TestBookingDto>) {
+      return (data as List)
+              .map((e) => deserialize<_i11.TestBookingDto>(e))
+              .toList()
+          as T;
+    }
+    if (t == List<int>) {
+      return (data as List).map((e) => deserialize<int>(e)).toList() as T;
+    }
     try {
       return _i2.Protocol().deserialize<T>(data, t);
     } on _i1.DeserializationTypeNotFoundException catch (_) {}
@@ -120,9 +153,11 @@ class Protocol extends _i1.SerializationManagerServer {
   static String? getClassNameForType(Type type) {
     return switch (type) {
       _i3.Greeting => 'Greeting',
-      _i4.LoginResponse => 'LoginResponse',
-      _i5.PatientProfileDto => 'PatientProfileDto',
-      _i6.UserListItem => 'UserListItem',
+      _i4.LabTestInfo => 'LabTestInfo',
+      _i5.LoginResponse => 'LoginResponse',
+      _i6.PatientProfileDto => 'PatientProfileDto',
+      _i7.TestBookingDto => 'TestBookingDto',
+      _i8.UserListItem => 'UserListItem',
       _ => null,
     };
   }
@@ -139,11 +174,15 @@ class Protocol extends _i1.SerializationManagerServer {
     switch (data) {
       case _i3.Greeting():
         return 'Greeting';
-      case _i4.LoginResponse():
+      case _i4.LabTestInfo():
+        return 'LabTestInfo';
+      case _i5.LoginResponse():
         return 'LoginResponse';
-      case _i5.PatientProfileDto():
+      case _i6.PatientProfileDto():
         return 'PatientProfileDto';
-      case _i6.UserListItem():
+      case _i7.TestBookingDto():
+        return 'TestBookingDto';
+      case _i8.UserListItem():
         return 'UserListItem';
     }
     className = _i2.Protocol().getClassNameForObject(data);
@@ -162,14 +201,20 @@ class Protocol extends _i1.SerializationManagerServer {
     if (dataClassName == 'Greeting') {
       return deserialize<_i3.Greeting>(data['data']);
     }
+    if (dataClassName == 'LabTestInfo') {
+      return deserialize<_i4.LabTestInfo>(data['data']);
+    }
     if (dataClassName == 'LoginResponse') {
-      return deserialize<_i4.LoginResponse>(data['data']);
+      return deserialize<_i5.LoginResponse>(data['data']);
     }
     if (dataClassName == 'PatientProfileDto') {
-      return deserialize<_i5.PatientProfileDto>(data['data']);
+      return deserialize<_i6.PatientProfileDto>(data['data']);
+    }
+    if (dataClassName == 'TestBookingDto') {
+      return deserialize<_i7.TestBookingDto>(data['data']);
     }
     if (dataClassName == 'UserListItem') {
-      return deserialize<_i6.UserListItem>(data['data']);
+      return deserialize<_i8.UserListItem>(data['data']);
     }
     if (dataClassName.startsWith('serverpod.')) {
       data['className'] = dataClassName.substring(10);

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'lab_test_panel.dart';
+import 'package:backend_client/backend_client.dart' as backend;
+import 'dart:convert';
 import 'lab_staff_profile.dart';
+import 'lab_test_panel.dart';
 
 class LabTesterHome extends StatefulWidget {
   const LabTesterHome({super.key});
@@ -16,12 +18,126 @@ class _LabTesterHomeState extends State<LabTesterHome> {
   final List<int> _navigationHistory = [];
   bool _isDarkMode = true;
 
-  String name = "Kamal Hosen";
+  String name = "Lab Technician";
+  String role = "Lab Technician";
+
+  // Booking statistics
+  int _totalBookings = 0;
+  int _pendingBookings = 0;
+  int _completedBookings = 0;
 
   @override
   void initState() {
     super.initState();
     _loadThemePreference();
+    _loadProfileData();
+    _loadBookingStats();
+  }
+
+  Future<void> _loadProfileData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final uid = prefs.getString('user_id');
+
+      if (uid == null || uid.isEmpty) return;
+
+      final jsonData = await backend.client.adminEndpoints.getAdminProfile(uid);
+
+      if (jsonData != null && jsonData.isNotEmpty && mounted) {
+        final data = jsonDecode(jsonData) as Map<String, dynamic>;
+        setState(() {
+          name = data['name']?.toString() ?? 'Lab Technician';
+          role =
+              data['specialization']?.toString() ??
+              data['role']?.toString() ??
+              'Lab Technician';
+        });
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error loading profile data: $e');
+    }
+  }
+
+  Future<void> _loadBookingStats() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // 1) Load legacy/local bookings from SharedPreferences
+      final localList = prefs.getStringList('lab_test_bookings') ?? [];
+      final Map<String, String> mergedStatus = {};
+
+      for (final encoded in localList) {
+        try {
+          final data = jsonDecode(encoded) as Map<String, dynamic>;
+          final id = data['bookingId']?.toString();
+          if (id == null || id.isEmpty) continue;
+          final status = (data['status'] as String?) ?? '';
+          mergedStatus[id] = status;
+        } catch (e) {
+          // ignore: avoid_print
+          print('Error parsing local booking for stats: $e');
+        }
+      }
+
+      // 2) Load bookings from backend database (test_bookings table)
+      try {
+        print('DEBUG: Attempting to connect to backend...');
+        final rows = await backend.client.profile.listTestBookings();
+        print(
+          'DEBUG: Successfully connected! Loaded ${rows.length} bookings for stats from backend',
+        );
+
+        for (final row in rows) {
+          final id = row.bookingId;
+          if (id.isEmpty) continue;
+
+          final status = row.status.isEmpty ? 'PENDING' : row.status;
+
+          mergedStatus[id] = status;
+        }
+
+        print('DEBUG: Total bookings for stats: ${mergedStatus.length}');
+      } catch (e, st) {
+        // ignore: avoid_print
+        print('Error loading booking stats from backend: $e\n$st');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Cannot connect to backend server. Please check if the server is running on http://localhost:8080',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+
+      int total = mergedStatus.length;
+      int pending = 0;
+      int completed = 0;
+
+      mergedStatus.forEach((_, status) {
+        final lower = status.toLowerCase();
+        if (lower.contains('pending')) {
+          pending++;
+        } else if (lower.contains('completed')) {
+          completed++;
+        }
+      });
+
+      if (mounted) {
+        setState(() {
+          _totalBookings = total;
+          _pendingBookings = pending;
+          _completedBookings = completed;
+        });
+      }
+    } catch (e) {
+      print('Error loading booking stats: $e');
+    }
   }
 
   Future<void> _loadThemePreference() async {
@@ -143,7 +259,7 @@ class _LabTesterHomeState extends State<LabTesterHome> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Kamal Hosen',
+                                    name,
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -152,7 +268,7 @@ class _LabTesterHomeState extends State<LabTesterHome> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Senior Lab Technician',
+                                    role,
                                     style: TextStyle(color: subtextColor),
                                   ),
                                   const SizedBox(height: 8),
@@ -207,9 +323,9 @@ class _LabTesterHomeState extends State<LabTesterHome> {
                                     ),
                                   ),
                                   const SizedBox(height: 12),
-                                  const Text(
-                                    "12",
-                                    style: TextStyle(
+                                  Text(
+                                    "$_pendingBookings",
+                                    style: const TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.orange,
@@ -254,9 +370,9 @@ class _LabTesterHomeState extends State<LabTesterHome> {
                                     ),
                                   ),
                                   const SizedBox(height: 12),
-                                  const Text(
-                                    "8",
-                                    style: TextStyle(
+                                  Text(
+                                    "$_totalBookings",
+                                    style: const TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.blue,
@@ -264,7 +380,7 @@ class _LabTesterHomeState extends State<LabTesterHome> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    "In Progress",
+                                    "Total Tests",
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey[600],
@@ -304,9 +420,9 @@ class _LabTesterHomeState extends State<LabTesterHome> {
                                     ),
                                   ),
                                   const SizedBox(height: 12),
-                                  const Text(
-                                    "15",
-                                    style: TextStyle(
+                                  Text(
+                                    "$_completedBookings",
+                                    style: const TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.green,
@@ -346,6 +462,11 @@ class _LabTesterHomeState extends State<LabTesterHome> {
                 _navigationHistory.add(_selectedIndex);
                 _selectedIndex = index;
               });
+              if (index == 0) {
+                // Refresh stats when returning to Home tab so that
+                // new bookings / completed tests are reflected.
+                _loadBookingStats();
+              }
             }
           },
           items: const [
