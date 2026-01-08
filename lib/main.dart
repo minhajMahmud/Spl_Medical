@@ -43,24 +43,10 @@ import 'src/ForgetPassword.dart';
 // Import from your existing backend_client package
 import 'package:backend_client/backend_client.dart';
 
-import 'package:flutter/foundation.dart'; // For kDebugMode, kIsWeb
-
 void main() {
   // Initialize Serverpod client before running app
   WidgetsFlutterBinding.ensureInitialized();
-
-  String? displayUrl;
-
-  // For Android Emulator in Debug mode, use the special IP
-  if (kDebugMode &&
-      !kIsWeb &&
-      defaultTargetPlatform == TargetPlatform.android) {
-    displayUrl = 'http://10.0.2.2:8080/';
-  }
-
-  // Pass null to let backend_client use environment variable or localhost default
-  initServerpodClient(url: displayUrl);
-
+  initServerpodClient();
   runApp(const MyApp());
 }
 

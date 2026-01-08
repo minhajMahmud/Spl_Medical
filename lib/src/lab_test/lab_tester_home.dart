@@ -106,7 +106,7 @@ class _LabTesterHomeState extends State<LabTesterHome> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Cannot connect to backend server. Please check your connection.',
+                'Cannot connect to backend server. Please check if the server is running on http://localhost:8080',
               ),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 5),
