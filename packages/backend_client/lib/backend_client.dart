@@ -5,7 +5,7 @@ import 'package:backend_client/backend_client.dart';
 late Client client;
 
 void initServerpodClient() {
-  late String serverUrl='http://localhost:8080/';
+  late String serverUrl = 'http://localhost:8080/';
 
   client = Client(serverUrl);
 

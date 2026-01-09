@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS test_bookings (
     patient_id BIGINT REFERENCES users(user_id),
     booking_date DATE DEFAULT CURRENT_DATE,
     is_external_patient BOOLEAN DEFAULT FALSE,
+    external_patient_name VARCHAR(100),
+    external_patient_phone VARCHAR(20),
+    external_patient_email VARCHAR(150),
     status test_booking_status DEFAULT 'PENDING',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
